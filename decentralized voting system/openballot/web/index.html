@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenBallot 🗳️ | Decentralized Cryptographic Voting Node</title>
+  <meta name="description" content="Auditable, tamper-evident digital voting on a Nakamoto-style decentralized blockchain ledger with Ed25519 signatures.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header>
+    <div class="nav-container">
+      <div class="brand">
+        <div class="brand-icon">🗳️</div>
+        <div class="brand-info">
+          <h1>OpenBallot</h1>
+          <p>Cryptographic Voting Node</p>
+        </div>
+      </div>
+
+      <div class="node-status-bar">
+        <div class="status-badge" id="nodeStatusBadge">
+          <span class="status-dot"></span>
+          <span id="nodeStatusText">Node Active: Port 8000</span>
+        </div>
+        <div class="quick-actions">
+          <button id="btnQuickMine" class="btn btn-mine btn-sm">⛏️ Mine Block</button>
+          <button id="btnQuickRefresh" class="btn btn-secondary btn-sm">🔄 Refresh</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Top KPI Metrics Grid -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Chain Height</span>
+          <span class="metric-icon">⛓️</span>
+        </div>
+        <div class="metric-value" id="statChainHeight">1</div>
+        <div class="metric-sub" id="statChainSub">Including Genesis block</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Mempool Pool</span>
+          <span class="metric-icon">⏳</span>
+        </div>
+        <div class="metric-value" id="statMempoolCount">0</div>
+        <div class="metric-sub" id="statMempoolSub">Pending unconfirmed ballots</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Total Votes Sealed</span>
+          <span class="metric-icon">🗳️</span>
+        </div>
+        <div class="metric-value" id="statTotalVotes">0</div>
+        <div class="metric-sub" id="statVotesSub">Across all confirmed blocks</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">PoW Difficulty</span>
+          <span class="metric-icon">⚡</span>
+        </div>
+        <div class="metric-value" id="statDifficulty">1</div>
+        <div class="metric-sub" id="statDifficultySub">Prefix target: "0"</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-header">
+          <span class="metric-title">Registered Voters</span>
+          <span class="metric-icon">👥</span>
+        </div>
+        <div class="metric-value" id="statVoterCount">5</div>
+        <div class="metric-sub" id="statVoterSub">Whitelisted public keys</div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav" role="tablist">
+      <button class="tab-btn active" data-tab="tab-vote" id="tabBtnVote">🗳️ Cast Ballot</button>
+      <button class="tab-btn" data-tab="tab-tally" id="tabBtnTally">📊 Election Results</button>
+      <button class="tab-btn" data-tab="tab-chain" id="tabBtnChain">⛓️ Block Explorer</button>
+      <button class="tab-btn" data-tab="tab-mempool" id="tabBtnMempool">⏳ Mempool (<span id="mempoolTabBadge">0</span>)</button>
+      <button class="tab-btn" data-tab="tab-keys" id="tabBtnKeys">🔑 Voter Keyring</button>
+      <button class="tab-btn" data-tab="tab-network" id="tabBtnNetwork">🌐 Peer Network</button>
+    </nav>
+
+    <!-- TAB 1: CAST BALLOT -->
+    <section id="tab-vote" class="tab-pane active">
+      <div class="split-grid">
+        <!-- Form Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>✍️</span> Submit Cryptographic Ballot</h2>
+              <p class="panel-desc">Sign your choice using Ed25519 private key. Ballot will be verified and queued into mempool.</p>
+            </div>
+            <button id="btnQuickKeygen" class="btn btn-secondary btn-sm">➕ New Voter Key</button>
+          </div>
+
+          <form id="voteForm">
+            <!-- Quick Voter Select -->
+            <div class="form-group">
+              <label>Select Sample Voter Keypair</label>
+              <div class="voter-pills" id="sampleVoterPills">
+                <span class="voter-pill active" data-voter="alice">Alice</span>
+                <span class="voter-pill" data-voter="bob">Bob</span>
+                <span class="voter-pill" data-voter="charlie">Charlie</span>
+                <span class="voter-pill" data-voter="dave">Dave</span>
+                <span class="voter-pill" data-voter="eve">Eve</span>
+                <span class="voter-pill" data-voter="custom">Custom Key</span>
+              </div>
+            </div>
+
+            <!-- Voter Public Key -->
+            <div class="form-group">
+              <label for="inputVoterId">Voter ID (Public Key Hex)</label>
+              <input type="text" id="inputVoterId" class="input-field" placeholder="64-character Ed25519 Public Key" readonly required>
+            </div>
+
+            <!-- Voter Secret Key -->
+            <div class="form-group">
+              <label for="inputSecretKey">Voter Secret Key (Hex)</label>
+              <input type="password" id="inputSecretKey" class="input-field" placeholder="64-character Ed25519 Secret Key" required>
+            </div>
+
+            <!-- Proposal ID -->
+            <div class="form-group">
+              <label for="selectProposal">Election / Referendum Proposal</label>
+              <select id="selectProposal" class="input-field">
+                <option value="PROP-2026-01">PROP-2026-01: Establish Decentralized Community Treasury</option>
+                <option value="PROP-2026-02">PROP-2026-02: Upgrade Nakamoto Consensus to PoW Difficulty 2</option>
+                <option value="custom">+ Create Custom Proposal ID...</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="customProposalGroup" style="display: none;">
+              <label for="inputCustomProposal">Custom Proposal Identifier</label>
+              <input type="text" id="inputCustomProposal" class="input-field" placeholder="e.g. PROP-GOV-2026">
+            </div>
+
+            <!-- Choice Selector -->
+            <div class="form-group">
+              <label>Vote Choice</label>
+              <div class="choice-cards">
+                <div class="choice-card choice-yes active" data-choice="YES">
+                  <div class="choice-title">YES</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">Approve Proposal</div>
+                </div>
+                <div class="choice-card choice-no" data-choice="NO">
+                  <div class="choice-title">NO</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">Reject Proposal</div>
+                </div>
+                <div class="choice-card choice-abstain" data-choice="ABSTAIN">
+                  <div class="choice-title">ABSTAIN</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">Neutral Vote</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stake Weight -->
+            <div class="form-group">
+              <label for="inputWeight">Vote Stake Weight</label>
+              <input type="number" id="inputWeight" class="input-field" value="1" min="1" max="100">
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="btnSubmitVote" class="btn btn-primary" style="width: 100%; margin-top: 1rem; padding: 0.85rem;">
+              🔒 Sign Digitally & Cast Ballot
+            </button>
+          </form>
+        </div>
+
+        <!-- Verification & Signature Preview Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>🛡️</span> Cryptographic Inspection</h2>
+              <p class="panel-desc">Real-time Ed25519 payload digest and signature verification</p>
+            </div>
+            <span class="status-badge" style="color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.3); background: rgba(6, 182, 212, 0.1);">
+              Ed25519 + SHA256
+            </span>
+          </div>
+
+          <div style="margin-bottom: 1.25rem;">
+            <label>Serialized Payload to Sign:</label>
+            <div class="code-preview" id="previewPayload">voter_id:proposal_id:choice:weight</div>
+          </div>
+
+          <div style="margin-bottom: 1.25rem;">
+            <label>SHA-256 Digest (32-bytes):</label>
+            <div class="code-preview" id="previewDigest" style="color: #a855f7;">-</div>
+          </div>
+
+          <div style="margin-bottom: 1.25rem;">
+            <label>Generated Digital Signature (64-bytes hex):</label>
+            <div class="code-preview" id="previewSignature" style="color: #10b981; max-height: 80px;">Ready to sign...</div>
+          </div>
+
+          <div style="padding: 1rem; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 0.82rem; color: var(--text-secondary);">
+            <strong>Security Guarantees:</strong>
+            <ul style="margin-left: 1.25rem; margin-top: 0.5rem; line-height: 1.6;">
+              <li>Non-repudiation: Only private key holder can create signature</li>
+              <li>Replay Protection: Proposal ID is bound cryptographically in the signed digest</li>
+              <li>Sybil & Double-Voting Protection: Validated against ledger & mempool</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: ELECTION RESULTS & TALLY -->
+    <section id="tab-tally" class="tab-pane">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title"><span>📊</span> Verified Election Tallies</h2>
+            <p class="panel-desc">Auditable consensus results tallied from confirmed blockchain blocks</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="btnRefreshTally" class="btn btn-secondary btn-sm">🔄 Recalculate Tally</button>
+          </div>
+        </div>
+
+        <div id="proposalsTallyContainer">
+          <!-- Dynamic tally cards loaded here -->
+          <div class="empty-state">
+            <div class="empty-icon">🗳️</div>
+            <p>Loading election tally results from node ledger...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: BLOCKCHAIN EXPLORER -->
+    <section id="tab-chain" class="tab-pane">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title"><span>⛓️</span> Ledger Block Explorer</h2>
+            <p class="panel-desc">Complete immutable chain of mined blocks and cryptographic hashes</p>
+          </div>
+          <div class="status-badge" id="chainSummaryBadge">
+            Height: 1
+          </div>
+        </div>
+
+        <div class="chain-timeline" id="chainTimelineContainer">
+          <!-- Blocks rendered dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: MEMPOOL INSPECTOR -->
+    <section id="tab-mempool" class="tab-pane">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title"><span>⏳</span> Unconfirmed Ballot Mempool</h2>
+            <p class="panel-desc">Pending voter ballots waiting to be sealed into the next block</p>
+          </div>
+          <button id="btnMineMempool" class="btn btn-mine">⛏️ Mine Pending Ballots</button>
+        </div>
+
+        <div class="mempool-list" id="mempoolListContainer">
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>Mempool is currently empty. Cast a ballot to see it staged here!</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: VOTER KEYRING & REGISTRATION -->
+    <section id="tab-keys" class="tab-pane">
+      <div class="split-grid">
+        <!-- Key Generator -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>🔐</span> Ed25519 Keypair Generator</h2>
+              <p class="panel-desc">Generate new cryptographic voter credentials</p>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+              Click below to generate an asymmetric Ed25519 keypair. The public key acts as the Voter ID, and the secret key signs ballots.
+            </p>
+            <button id="btnGenerateKey" class="btn btn-primary">⚡ Generate New Keypair</button>
+          </div>
+
+          <div id="newKeyDisplay" style="display: none;">
+            <div class="form-group">
+              <label>Generated Voter ID (Public Key)</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="genPublicKey" class="input-field" readonly>
+                <button class="btn btn-secondary btn-sm copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('genPublicKey').value); showToast('Copied Public Key!', 'success')">Copy</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Secret Key (Private)</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="genSecretKey" class="input-field" readonly>
+                <button class="btn btn-secondary btn-sm copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('genSecretKey').value); showToast('Copied Secret Key!', 'success')">Copy</button>
+              </div>
+            </div>
+
+            <button id="btnRegisterGeneratedKey" class="btn btn-secondary" style="width: 100%;">
+              ➕ Whitelist This Voter on Ledger
+            </button>
+          </div>
+        </div>
+
+        <!-- Whitelist Registration -->
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>📋</span> Authorized Voter Registry</h2>
+              <p class="panel-desc">Whitelisted voter public keys permitted to cast ballots</p>
+            </div>
+          </div>
+
+          <form id="registerVoterForm" style="margin-bottom: 1.5rem;">
+            <div class="form-group">
+              <label for="inputRegisterKey">Register New Voter Public Key</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="inputRegisterKey" class="input-field" placeholder="Enter 64-char Hex Public Key" required>
+                <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Whitelist</button>
+              </div>
+            </div>
+          </form>
+
+          <label>Pre-configured Sample Keyring:</label>
+          <div id="sampleKeyringList" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+            <!-- Render sample voter keys -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: PEER NETWORK & CONSENSUS -->
+    <section id="tab-network" class="tab-pane">
+      <div class="split-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>🌐</span> Connected Peer Nodes</h2>
+              <p class="panel-desc">Manage distributed peer node connections</p>
+            </div>
+          </div>
+
+          <form id="addPeerForm" style="margin-bottom: 1.5rem;">
+            <div class="form-group">
+              <label for="inputPeerUrl">Add Peer Node URL</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="url" id="inputPeerUrl" class="input-field" placeholder="http://192.168.1.100:8000" required>
+                <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Add Peer</button>
+              </div>
+            </div>
+          </form>
+
+          <div id="peerListContainer">
+            <!-- Peer list -->
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title"><span>⚡</span> Consensus Sync</h2>
+              <p class="panel-desc">Nakamoto Longest-Chain fork resolution</p>
+            </div>
+          </div>
+
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+            In OpenBallot, conflicts between peer branches are settled by longest valid chain resolution. If another node has a longer sequence of valid Proof-of-Work blocks, your local ledger automatically adopts the authoritative branch.
+          </p>
+
+          <div style="padding: 1.25rem; background: rgba(10, 14, 23, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span style="font-size: 0.82rem; color: var(--text-secondary);">Local Block Height</span>
+              <span style="font-weight: 700; font-family: var(--font-mono);" id="consensusLocalHeight">1</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="font-size: 0.82rem; color: var(--text-secondary);">Active Peers</span>
+              <span style="font-weight: 700; font-family: var(--font-mono);" id="consensusPeerCount">0</span>
+            </div>
+          </div>
+
+          <button id="btnTriggerSync" class="btn btn-secondary" style="width: 100%;">
+            🔄 Query Peers & Resolve Forks
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

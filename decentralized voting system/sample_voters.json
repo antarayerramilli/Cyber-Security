@@ -1,0 +1,22 @@
+{
+  "alice": {
+    "voter_id": "58bea4c603be5452406b8095010bc130a3af8b4be275766a1fdd0d3d13e35199",
+    "secret_key": "e542aafc2d5d075b77428efea29318f6a8bc7269a022f17a06041dccf85cdb66"
+  },
+  "bob": {
+    "voter_id": "017617fc293d74fd6ad4da7e7378170b6146cdbcc06f8306d986f15f9e9df2f1",
+    "secret_key": "c1f6d81570de7ae99fba14596e7560eddc0a62407b6521e927e1864891904ceb"
+  },
+  "charlie": {
+    "voter_id": "c6cea9b05aed3dbf0c835664e134f885d86a005dfc521b8f3db10c404e1156ff",
+    "secret_key": "ddadf45f3de084f3b0239a1d5b3a2bbce7f50659ca5689f32c69ac9d7e12bb83"
+  },
+  "dave": {
+    "voter_id": "290b8419bbd8644df136f91f65d733f280e9391c41f466d2c299ff75d0b13959",
+    "secret_key": "a1a16fedc4d440e876484764c05cd53580ef11a5f4ce4986a15fc53b0fe1566f"
+  },
+  "eve": {
+    "voter_id": "5b7f40c0fca1fd9c2b6a32dae64a6b16069072869a6b95c46627164d5c66d2f7",
+    "secret_key": "7f304b52072920d3878d3270c10178da5a3e1b2c5157235238c31d9fb1c90b58"
+  }
+}

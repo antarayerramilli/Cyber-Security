@@ -12,9 +12,8 @@ class Ballot:
         self.weight = int(weight)
 
     def get_digest(self) -> bytes:
-        # Serialized data to sign
-        # Note: proposal binding handled at routing layer
-        payload = f"{self.voter_id}:{self.choice}:{self.weight}"
+        # Cryptographically binds voter_id, proposal_id, choice, and weight
+        payload = f"{self.voter_id.lower()}:{self.proposal_id}:{self.choice}:{self.weight}"
         return hashlib.sha256(payload.encode("utf-8")).digest()
 
     def verify(self) -> bool:

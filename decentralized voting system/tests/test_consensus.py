@@ -49,3 +49,41 @@ def test_conflict_resolution_honest_fork():
     result = engine_a.resolve_conflicts([ledger_b.chain])
     assert result is True
     assert len(ledger_a.chain) == 3
+
+
+def test_chain_validation_non_sequential_index():
+    ledger = Ledger()
+    ledger.create_genesis_block()
+    engine = ConsensusEngine(ledger=ledger, difficulty=1)
+
+    # Invalid block index (skips 1 to 5)
+    b1 = Block(index=5, prev_hash=ledger.chain[0].hash, ballots=[])
+    b1.mine(difficulty=1)
+    ledger.chain.append(b1)
+
+    assert engine.is_valid_chain(ledger.chain) is False
+
+
+def test_chain_validation_double_voting():
+    from openballot.crypto import generate_keypair, public_key_to_hex, sign_message
+    from openballot.ballot import Ballot
+
+    ledger = Ledger()
+    ledger.create_genesis_block()
+    engine = ConsensusEngine(ledger=ledger, difficulty=1)
+
+    priv, pub = generate_keypair()
+    vid = public_key_to_hex(pub)
+
+    b1_vote = Ballot(voter_id=vid, proposal_id="PROP-1", choice="YES")
+    b1_vote.signature = sign_message(priv, b1_vote.get_digest()).hex()
+
+    b2_vote = Ballot(voter_id=vid, proposal_id="PROP-1", choice="NO")
+    b2_vote.signature = sign_message(priv, b2_vote.get_digest()).hex()
+
+    block1 = Block(index=1, prev_hash=ledger.chain[0].hash, ballots=[b1_vote, b2_vote])
+    block1.mine(difficulty=1)
+    ledger.chain.append(block1)
+
+    # Should detect double voting in block1
+    assert engine.is_valid_chain(ledger.chain) is False

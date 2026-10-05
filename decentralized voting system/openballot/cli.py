@@ -105,10 +105,27 @@ def cmd_status(args):
 
 
 def cmd_serve(args):
+    from pathlib import Path
     ledger = Ledger()
     ledger.create_genesis_block()
+
+    # Load sample_voters.json if present
+    sample_file = Path(__file__).parent.parent / "sample_voters.json"
+    if sample_file.is_file():
+        try:
+            with open(sample_file, "r") as f:
+                voters_data = json.load(f)
+                for voter_info in voters_data.values():
+                    vid = voter_info.get("voter_id")
+                    if vid:
+                        ledger.register_voter(vid)
+            print(f"[*] Loaded {len(ledger.voter_registry)} authorized voters from sample_voters.json")
+        except Exception as e:
+            print(f"[*] Notice: Could not load sample_voters.json: {e}")
+
     server = NodeServer(("0.0.0.0", args.port), NodeHandler, ledger=ledger, difficulty=args.difficulty)
     print(f"[*] OpenBallot node running on http://127.0.0.1:{args.port} (difficulty={args.difficulty})")
+    print(f"[*] OpenBallot Web Interface: http://127.0.0.1:{args.port}/")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

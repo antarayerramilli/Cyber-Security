@@ -19,10 +19,24 @@ class ConsensusEngine:
         if not chain:
             return False
 
+        if chain[0].index != 0 or chain[0].prev_hash != "0" * 64:
+            logger.warning("Genesis block invalid: index %d prev_hash %s", chain[0].index, chain[0].prev_hash)
+            return False
+
+        seen_votes = set()
+        for ballot in chain[0].ballots:
+            if not ballot.verify():
+                return False
+            seen_votes.add((ballot.proposal_id, ballot.voter_id.lower()))
+
         # Verify sequential block transitions and proofs
         for i in range(1, len(chain)):
             prev = chain[i - 1]
             curr = chain[i]
+
+            if curr.index != prev.index + 1:
+                logger.warning("Index mismatch at block %d (expected %d)", curr.index, prev.index + 1)
+                return False
 
             if curr.prev_hash != prev.hash:
                 logger.warning("Hash mismatch at block %d: %s != %s", curr.index, curr.prev_hash, prev.hash)
@@ -41,6 +55,11 @@ class ConsensusEngine:
                 if not ballot.verify():
                     logger.warning("Corrupt ballot signature in block %d", curr.index)
                     return False
+                vote_key = (ballot.proposal_id, ballot.voter_id.lower())
+                if vote_key in seen_votes:
+                    logger.warning("Double voting detected in block %d for voter %s on proposal %s", curr.index, ballot.voter_id, ballot.proposal_id)
+                    return False
+                seen_votes.add(vote_key)
 
         return True
 

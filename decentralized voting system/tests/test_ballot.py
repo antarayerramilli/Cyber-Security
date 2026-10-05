@@ -32,3 +32,16 @@ def test_ballot_serialization():
     assert recovered.proposal_id == ballot.proposal_id
     assert recovered.choice == ballot.choice
     assert recovered.signature == ballot.signature
+
+
+def test_ballot_cross_proposal_replay_rejected():
+    priv, pub = generate_keypair()
+    voter_id = public_key_to_hex(pub)
+    ballot1 = Ballot(voter_id=voter_id, proposal_id="PROP-LEGAL", choice="YES")
+    sig = sign_message(priv, ballot1.get_digest())
+    ballot1.signature = sig.hex()
+    assert ballot1.verify() is True
+
+    # Attempt replay with different proposal
+    ballot2 = Ballot(voter_id=voter_id, proposal_id="PROP-MALICIOUS", choice="YES", signature=ballot1.signature)
+    assert ballot2.verify() is False
