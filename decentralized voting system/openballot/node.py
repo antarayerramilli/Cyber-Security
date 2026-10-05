@@ -1,6 +1,8 @@
 import json
 import logging
 import mimetypes
+import urllib.request
+import urllib.error
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -11,6 +13,8 @@ from openballot.block import Block
 from openballot.ledger import Ledger
 from openballot.mempool import Mempool
 from openballot.consensus import ConsensusEngine
+from openballot.audit import audit_log
+from openballot.elections import election_manager
 from openballot.crypto import (
     generate_keypair,
     public_key_to_hex,
@@ -35,6 +39,7 @@ class NodeServer(HTTPServer):
         self.peers: List[str] = []
         if not self.ledger.chain:
             self.ledger.create_genesis_block()
+            audit_log.log("GENESIS_CREATED", "Genesis block #0 created with initial proof", "SUCCESS")
 
 
 class NodeHandler(BaseHTTPRequestHandler):
@@ -48,7 +53,7 @@ class NodeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
         self.wfile.write(body)
@@ -79,14 +84,16 @@ class NodeHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        qs = parse_qs(parsed.query)
 
+        # Health
         if path == "/health":
             reg_count = len(self.node.ledger.voter_registry)
             proposals = self.node.ledger.get_proposals()
@@ -101,42 +108,170 @@ class NodeHandler(BaseHTTPRequestHandler):
                 "latest_block_hash": self.node.ledger.latest_block.hash
             })
 
+        # Elections configuration with live tallies
+        elif path == "/api/v1/elections":
+            all_elections = election_manager.get_all()
+            result = []
+            for e in all_elections:
+                pid = e["proposal_id"]
+                tally = self.node.ledger.tally(pid)
+                total_votes = sum(tally.values())
+                result.append({
+                    **e,
+                    "tally": tally,
+                    "total_votes": total_votes
+                })
+            return self._send_json({"elections": result})
+
+        # Blockchain Ledger
         elif path == "/api/v1/chain":
             chain_data = [b.to_dict() for b in self.node.ledger.chain]
             return self._send_json({"length": len(chain_data), "chain": chain_data})
 
+        # Blockchain Integrity Verification
+        elif path == "/api/v1/verify-chain":
+            detailed_report = self.node.consensus.verify_chain_detailed()
+            audit_log.log(
+                "CHAIN_VERIFICATION",
+                f"Full chain verification executed: {detailed_report['total_blocks']} blocks evaluated",
+                "SUCCESS" if detailed_report["valid"] else "ERROR"
+            )
+            return self._send_json(detailed_report)
+
+        # Individual Vote / Ballot Verification
+        elif path == "/api/v1/verify-ballot":
+            query = qs.get("query", [""])[0].strip().lower()
+            if not query:
+                return self._send_json({"error": "Missing 'query' parameter (enter voter public key or vote digest)"}, 400)
+
+            # Search in confirmed blockchain blocks
+            found = False
+            result = None
+            for block in self.node.ledger.chain:
+                for ballot in block.ballots:
+                    digest_hex = ballot.get_digest().hex().lower()
+                    if query in (ballot.voter_id.lower(), digest_hex, ballot.signature.lower()):
+                        sig_valid = ballot.verify()
+                        found = True
+                        result = {
+                            "found": True,
+                            "location": "CONFIRMED_BLOCK",
+                            "block_index": block.index,
+                            "block_hash": block.hash,
+                            "block_timestamp": block.timestamp,
+                            "voter_id": ballot.voter_id,
+                            "proposal_id": ballot.proposal_id,
+                            "choice": ballot.choice,
+                            "weight": ballot.weight,
+                            "vote_id": digest_hex,
+                            "signature": ballot.signature,
+                            "signature_valid": sig_valid,
+                            "block_valid": True,
+                            "status": "VERIFIED_ON_CHAIN"
+                        }
+                        break
+                if found:
+                    break
+
+            # Search in unconfirmed mempool if not on chain
+            if not found:
+                for ballot in self.node.mempool.all():
+                    digest_hex = ballot.get_digest().hex().lower()
+                    if query in (ballot.voter_id.lower(), digest_hex, ballot.signature.lower()):
+                        sig_valid = ballot.verify()
+                        found = True
+                        result = {
+                            "found": True,
+                            "location": "MEMPOOL",
+                            "block_index": None,
+                            "block_hash": None,
+                            "voter_id": ballot.voter_id,
+                            "proposal_id": ballot.proposal_id,
+                            "choice": ballot.choice,
+                            "weight": ballot.weight,
+                            "vote_id": digest_hex,
+                            "signature": ballot.signature,
+                            "signature_valid": sig_valid,
+                            "block_valid": None,
+                            "status": "PENDING_CONFIRMATION"
+                        }
+                        break
+
+            if found:
+                audit_log.log("BALLOT_VERIFY", f"Verified ballot {result['voter_id'][:8]}... for {result['proposal_id']}: {result['status']}", "SUCCESS")
+                return self._send_json(result)
+            else:
+                audit_log.log("BALLOT_VERIFY", f"Ballot lookup failed for query: {query[:12]}...", "WARNING")
+                return self._send_json({
+                    "found": False,
+                    "status": "NOT_FOUND",
+                    "message": "No matching ballot found on the confirmed blockchain or in the mempool."
+                }, 404)
+
+        # Mempool
         elif path == "/api/v1/mempool":
             ballots_data = [b.to_dict() for b in self.node.mempool.all()]
             return self._send_json({"count": len(ballots_data), "ballots": ballots_data})
 
+        # Proposals list
         elif path == "/api/v1/proposals":
             proposals_set = set(self.node.ledger.get_proposals())
             for b in self.node.mempool.all():
                 if b.proposal_id:
                     proposals_set.add(b.proposal_id)
-
-            if not proposals_set:
-                proposals_set = {"PROP-2026-01", "PROP-2026-02"}
+            for e in election_manager.get_all():
+                proposals_set.add(e["proposal_id"])
 
             res = []
             for pid in sorted(proposals_set):
                 tally = self.node.ledger.tally(pid)
                 total_votes = sum(tally.values())
+                election_meta = election_manager.get(pid)
                 res.append({
                     "proposal_id": pid,
+                    "title": election_meta["title"] if election_meta else f"Proposal {pid}",
                     "tally": tally,
                     "total_votes": total_votes
                 })
             return self._send_json({"proposals": res})
 
+        # Tally for a specific proposal
         elif path == "/api/v1/tally":
-            qs = parse_qs(parsed.query)
             proposal = qs.get("proposal", [""])[0]
             if not proposal:
                 return self._send_json({"error": "Missing proposal query parameter"}, 400)
             tally = self.node.ledger.tally(proposal)
             return self._send_json({"proposal": proposal, "results": tally})
 
+        # Voter Registry list
+        elif path == "/api/v1/voters":
+            voters_list = []
+            registry = sorted(self.node.ledger.voter_registry)
+            proposals = self.node.ledger.get_proposals() or ["PROP-2026-01"]
+            for vid in registry:
+                voted_props = [p for p in proposals if self.node.ledger.has_voted(p, vid)]
+                pending_props = [b.proposal_id for b in self.node.mempool.all() if b.voter_id.lower() == vid.lower()]
+                voters_list.append({
+                    "voter_id": vid,
+                    "voter_id_short": f"{vid[:8]}...{vid[-6:]}",
+                    "authorized": True,
+                    "voted_proposals": voted_props,
+                    "pending_proposals": pending_props,
+                    "has_voted": len(voted_props) > 0
+                })
+            return self._send_json({
+                "count": len(voters_list),
+                "open_policy": len(registry) == 0,
+                "voters": voters_list
+            })
+
+        # Audit Log
+        elif path == "/api/v1/audit-log":
+            return self._send_json({
+                "events": audit_log.get_events()
+            })
+
+        # Peers
         elif path == "/api/v1/peers":
             return self._send_json({"peers": self.node.peers})
 
@@ -167,41 +302,69 @@ class NodeHandler(BaseHTTPRequestHandler):
         if data is None:
             return self._send_json({"error": "Invalid JSON payload"}, 400)
 
+        # Cast Ballot
         if path == "/api/v1/ballots":
-            ballot = Ballot.from_dict(data)
+            try:
+                ballot = Ballot.from_dict(data)
+            except ValueError as ve:
+                return self._send_json({"error": str(ve)}, 400)
 
             if not ballot.voter_id or not ballot.proposal_id or not ballot.choice:
                 return self._send_json({"error": "Missing required ballot fields"}, 400)
 
-            # 1. Verify digital signature
+            # Security Rule: Enforce standard weight = 1
+            if ballot.weight != 1:
+                audit_log.log("BALLOT_REJECTED", f"Unauthorized voting weight {ballot.weight} from voter {ballot.voter_id[:8]}", "WARNING")
+                return self._send_json({"error": "Invalid vote weight: standard elections require weight=1"}, 400)
+
+            # 1. Verify digital signature with Ed25519
             if not ballot.verify():
+                audit_log.log("SIGNATURE_FAILED", f"Cryptographic signature check failed for voter {ballot.voter_id[:8]}", "ERROR")
                 return self._send_json({"error": "Cryptographic signature verification failed"}, 401)
+            audit_log.log("SIGNATURE_VERIFIED", f"Ed25519 signature verified for voter {ballot.voter_id[:8]}", "SUCCESS")
 
             # 2. Verify voter registration (case-insensitive whitelist)
             if not self.node.ledger.is_registered(ballot.voter_id):
+                audit_log.log("UNAUTHORIZED_VOTER", f"Voter {ballot.voter_id[:8]} not in authorized registry", "WARNING")
                 return self._send_json({"error": "Voter ID not in authorized voter registry"}, 403)
 
             # 3. Check if voter already cast ballot on confirmed ledger
             if self.node.ledger.has_voted(ballot.proposal_id, ballot.voter_id):
-                return self._send_json({"error": "Voter has already cast a ballot for this proposal"}, 409)
+                audit_log.log("DOUBLE_VOTE_CONFIRMED", f"Duplicate vote attempted on confirmed ledger by {ballot.voter_id[:8]} on {ballot.proposal_id}", "WARNING")
+                return self._send_json({"error": "You have already submitted a vote for this proposal"}, 409)
 
             # 4. Check if voter already has a ballot pending in mempool
             if self.node.mempool.has_ballot(ballot.proposal_id, ballot.voter_id):
-                return self._send_json({"error": "Voter already has a pending ballot in mempool for this proposal"}, 409)
+                audit_log.log("DOUBLE_VOTE_MEMPOOL", f"Duplicate vote attempted in mempool by {ballot.voter_id[:8]} on {ballot.proposal_id}", "WARNING")
+                return self._send_json({"error": "A ballot for this voter is already pending in the mempool"}, 409)
 
             # Ingest ballot into mempool
             if not self.node.mempool.add(ballot):
                 return self._send_json({"error": "Duplicate ballot in mempool"}, 409)
-            return self._send_json({"status": "accepted", "proposal": ballot.proposal_id}, 202)
 
+            vote_id = ballot.get_digest().hex()
+            audit_log.log("BALLOT_INGESTED", f"Ballot added to mempool: {ballot.choice} on {ballot.proposal_id} (Vote ID: {vote_id[:8]}...)", "SUCCESS")
+            election_manager.ensure_exists(ballot.proposal_id)
+
+            return self._send_json({
+                "status": "accepted",
+                "vote_id": vote_id,
+                "proposal": ballot.proposal_id,
+                "message": "Ballot verified and queued into mempool"
+            }, 202)
+
+        # Mine Block
         elif path == "/api/v1/mine":
             pending = self.node.mempool.drain()
+            audit_log.log("MINING_STARTED", f"Proof-of-work mining initiated for {len(pending)} pending ballots", "INFO")
+
             # Filter and validate pending ballots
             valid_ballots = []
             seen_in_block = set()
             for b in pending:
                 vote_key = (b.proposal_id, b.voter_id.lower())
                 if (b.verify() and 
+                    b.weight == 1 and
                     self.node.ledger.is_registered(b.voter_id) and 
                     not self.node.ledger.has_voted(b.proposal_id, b.voter_id) and 
                     vote_key not in seen_in_block):
@@ -209,6 +372,7 @@ class NodeHandler(BaseHTTPRequestHandler):
                     seen_in_block.add(vote_key)
                 else:
                     logger.warning("Dropping invalid or duplicate ballot from block: %s", b)
+                    audit_log.log("BALLOT_DROPPED", f"Invalid or duplicate ballot dropped from mining pool: {b.voter_id[:8]}", "WARNING")
 
             new_block = Block(
                 index=len(self.node.ledger.chain),
@@ -217,48 +381,90 @@ class NodeHandler(BaseHTTPRequestHandler):
             )
             new_block.mine(difficulty=self.node.difficulty)
             self.node.ledger.chain.append(new_block)
+
+            audit_log.log(
+                "BLOCK_MINED",
+                f"Block #{new_block.index} successfully mined: {len(valid_ballots)} votes sealed (Hash: {new_block.hash[:12]}...)",
+                "SUCCESS"
+            )
+
             return self._send_json({
                 "status": "mined",
                 "block_index": new_block.index,
                 "block_hash": new_block.hash,
-                "ballots_sealed": len(valid_ballots)
+                "nonce": new_block.nonce,
+                "ballots_sealed": len(valid_ballots),
+                "timestamp": new_block.timestamp
             })
 
+        # Peers
         elif path == "/api/v1/peers":
-            peer = data.get("peer")
+            peer = data.get("peer", "").strip()
             if peer and peer not in self.node.peers:
                 self.node.peers.append(peer)
+                audit_log.log("PEER_ADDED", f"New peer registered: {peer}", "INFO")
             return self._send_json({"peers": self.node.peers})
 
+        # Sync with peers
         elif path == "/api/v1/sync":
+            # If peer sent a candidate chain, resolve it
             candidate_raw = data.get("chain", [])
-            if not candidate_raw:
-                return self._send_json({"error": "Empty chain provided"}, 400)
-            try:
-                candidate = [Block.from_dict(b) for b in candidate_raw]
-            except Exception as e:
-                return self._send_json({"error": f"Invalid block format: {e}"}, 400)
+            if candidate_raw:
+                try:
+                    candidate = [Block.from_dict(b) for b in candidate_raw]
+                except Exception as e:
+                    return self._send_json({"error": f"Invalid block format: {e}"}, 400)
 
-            replaced = self.node.consensus.resolve_conflicts([candidate])
+                replaced = self.node.consensus.resolve_conflicts([candidate])
+                if replaced:
+                    audit_log.log("CHAIN_SYNC", f"Adopted authoritative peer chain of length {len(candidate)}", "SUCCESS")
+                return self._send_json({
+                    "chain_replaced": replaced,
+                    "current_length": len(self.node.ledger.chain)
+                })
+
+            # Otherwise, pull chain from registered peers
+            synced_any = False
+            errors = []
+            for peer_url in list(self.node.peers):
+                try:
+                    req_url = f"{peer_url.rstrip('/')}/api/v1/chain"
+                    with urllib.request.urlopen(req_url, timeout=3) as resp:
+                        peer_data = json.loads(resp.read().decode("utf-8"))
+                        peer_chain = [Block.from_dict(b) for b in peer_data.get("chain", [])]
+                        if self.node.consensus.resolve_conflicts([peer_chain]):
+                            synced_any = True
+                            audit_log.log("PEER_SYNC", f"Synchronized longer chain from peer {peer_url}", "SUCCESS")
+                except Exception as err:
+                    errors.append(f"{peer_url}: {err}")
+
             return self._send_json({
-                "chain_replaced": replaced,
-                "current_length": len(self.node.ledger.chain)
+                "synced": synced_any,
+                "current_length": len(self.node.ledger.chain),
+                "peers_checked": len(self.node.peers),
+                "errors": errors
             })
 
+        # Register voter public key
         elif path == "/api/v1/register":
             voter_id = data.get("voter_id", "").strip()
             if not voter_id:
                 return self._send_json({"error": "Missing voter_id"}, 400)
             self.node.ledger.register_voter(voter_id)
+            audit_log.log("VOTER_REGISTERED", f"Voter {voter_id[:8]}... whitelisted in authorized registry", "INFO")
             return self._send_json({"status": "registered", "voter_id": voter_id.lower()}, 200)
 
+        # Key generation
         elif path == "/api/v1/keygen":
             priv, pub = generate_keypair()
+            pub_hex = public_key_to_hex(pub)
+            priv_hex = private_key_to_hex(priv)
             return self._send_json({
-                "voter_id": public_key_to_hex(pub),
-                "secret_key": private_key_to_hex(priv)
+                "voter_id": pub_hex,
+                "secret_key": priv_hex
             })
 
+        # Safe signing helper for web demonstration
         elif path == "/api/v1/sign":
             secret_key_hex = str(data.get("secret_key", "")).strip()
             proposal_id = str(data.get("proposal_id", "")).strip()
@@ -291,6 +497,21 @@ class NodeHandler(BaseHTTPRequestHandler):
 
         else:
             return self._send_json({"error": "Endpoint not found"}, 404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        data = self._read_json() or {}
+
+        if path == "/api/v1/peers":
+            peer = data.get("peer", "").strip()
+            if peer in self.node.peers:
+                self.node.peers.remove(peer)
+                audit_log.log("PEER_REMOVED", f"Removed peer: {peer}", "INFO")
+                return self._send_json({"status": "removed", "peers": self.node.peers})
+            return self._send_json({"error": "Peer not found in registry"}, 404)
+
+        return self._send_json({"error": "Endpoint not found"}, 404)
 
     def log_message(self, format, *args):
         # Silence default stderr logging for clean test runs

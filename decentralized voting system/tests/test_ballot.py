@@ -45,3 +45,15 @@ def test_ballot_cross_proposal_replay_rejected():
     # Attempt replay with different proposal
     ballot2 = Ballot(voter_id=voter_id, proposal_id="PROP-MALICIOUS", choice="YES", signature=ballot1.signature)
     assert ballot2.verify() is False
+
+
+def test_ballot_invalid_weight_rejected():
+    import pytest
+    with pytest.raises(ValueError):
+        Ballot(voter_id="abc", proposal_id="PROP-1", choice="YES", weight=0)
+
+    with pytest.raises(ValueError):
+        Ballot(voter_id="abc", proposal_id="PROP-1", choice="YES", weight=-5)
+
+    with pytest.raises(ValueError):
+        Ballot(voter_id="abc", proposal_id="PROP-1", choice="YES", weight=999)

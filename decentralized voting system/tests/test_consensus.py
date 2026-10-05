@@ -87,3 +87,35 @@ def test_chain_validation_double_voting():
 
     # Should detect double voting in block1
     assert engine.is_valid_chain(ledger.chain) is False
+
+
+def test_verify_chain_detailed_valid():
+    ledger = Ledger()
+    ledger.create_genesis_block()
+    engine = ConsensusEngine(ledger=ledger, difficulty=1)
+
+    b1 = Block(index=1, prev_hash=ledger.chain[0].hash, ballots=[])
+    b1.mine(difficulty=1)
+    ledger.chain.append(b1)
+
+    report = engine.verify_chain_detailed()
+    assert report["valid"] is True
+    assert report["total_blocks"] == 2
+    assert report["blocks"][0]["status"] == "VALID"
+    assert report["blocks"][1]["status"] == "VALID"
+
+
+def test_verify_chain_detailed_tampered():
+    ledger = Ledger()
+    ledger.create_genesis_block()
+    engine = ConsensusEngine(ledger=ledger, difficulty=1)
+
+    b1 = Block(index=1, prev_hash=ledger.chain[0].hash, ballots=[])
+    b1.mine(difficulty=1)
+    # Tamper with block 1 hash
+    b1.hash = "0badhash" + "0" * 56
+    ledger.chain.append(b1)
+
+    report = engine.verify_chain_detailed()
+    assert report["valid"] is False
+    assert report["blocks"][1]["status"] == "INVALID"

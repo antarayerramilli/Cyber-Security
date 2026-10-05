@@ -9,7 +9,12 @@ class Ballot:
         self.proposal_id = proposal_id.strip()
         self.choice = choice.strip()
         self.signature = signature.strip()
-        self.weight = int(weight)
+        w = int(weight)
+        if w < 1:
+            raise ValueError("Vote weight must be a positive integer (minimum 1)")
+        if w > 100:
+            raise ValueError("Vote weight exceeds maximum authorized threshold")
+        self.weight = w
 
     def get_digest(self) -> bytes:
         # Cryptographically binds voter_id, proposal_id, choice, and weight
