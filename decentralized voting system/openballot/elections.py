@@ -4,19 +4,27 @@ from typing import Dict, List, Optional, Any
 DEFAULT_ELECTIONS: Dict[str, Dict[str, Any]] = {
     "PROP-2026-01": {
         "proposal_id": "PROP-2026-01",
-        "title": "Campus Student Government President Election 2026",
-        "description": "Annual referendum for student body executive governance and campus community leadership.",
-        "category": "Student Governance",
+        "title": "Lok Sabha Parliamentary Constituency General Election 2026",
+        "description": "General parliamentary election for democratic representation and constituency leadership.",
+        "category": "Parliamentary / Lok Sabha",
         "status": "ACTIVE",
-        "choices": ["YES", "NO", "ABSTAIN"]
+        "choices": ["Candidate Alpha", "Candidate Beta", "Candidate Gamma", "NOTA"]
     },
     "PROP-2026-02": {
         "proposal_id": "PROP-2026-02",
-        "title": "University Library 24/7 Extended Hours Referendum",
-        "description": "Proposal to allocate student facility endowment funds to keep library study rooms open 24/7.",
-        "category": "Campus Facilities",
+        "title": "National Digital Public Infrastructure & Green Energy Referendum",
+        "description": "Referendum on allocating national development bond reserves for solar corridors and transit electrification.",
+        "category": "National Referendum",
         "status": "ACTIVE",
-        "choices": ["YES", "NO", "ABSTAIN"]
+        "choices": ["YES", "NO", "NOTA"]
+    },
+    "PROP-2026-03": {
+        "proposal_id": "PROP-2026-03",
+        "title": "Central University & IIT Student Council Presidential Election",
+        "description": "Annual student body council presidential election for academic and campus welfare governance.",
+        "category": "University Governance",
+        "status": "ACTIVE",
+        "choices": ["Candidate A (Progressive Council)", "Candidate B (Student Action)", "NOTA"]
     }
 }
 
@@ -35,15 +43,15 @@ class ElectionManager:
     def get(self, proposal_id: str) -> Optional[Dict[str, Any]]:
         return self._elections.get(proposal_id.strip())
 
-    def register_proposal(self, proposal_id: str, title: str, description: str, choices: Optional[List[str]] = None) -> Dict[str, Any]:
+    def register_proposal(self, proposal_id: str, title: str, description: str, choices: Optional[List[str]] = None, category: str = "Governance") -> Dict[str, Any]:
         p_id = proposal_id.strip()
         election = {
             "proposal_id": p_id,
             "title": title.strip() or f"Referendum {p_id}",
             "description": description.strip() or "General voting referendum.",
-            "category": "Governance",
+            "category": category.strip() or "Governance",
             "status": "ACTIVE",
-            "choices": choices or ["YES", "NO", "ABSTAIN"]
+            "choices": [c.strip() for c in (choices or ["YES", "NO", "ABSTAIN"]) if c.strip()]
         }
         self._elections[p_id] = election
         return election

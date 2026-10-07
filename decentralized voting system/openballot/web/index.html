@@ -14,18 +14,18 @@
 
   <!-- Official Top Bar -->
   <div class="official-banner">
-    <span>Official Digital Voting Node &bull; Cryptographic Governance Portal</span>
-    <span id="bannerTimestamp">System Time: UTC</span>
+    <span>🇮🇳 भारत निर्वाचन मंच &bull; Bharat Digital Voting Node &bull; Cryptographic EVM 2.0</span>
+    <span id="bannerTimestamp">Standard Time: IST (UTC+05:30)</span>
   </div>
 
   <!-- Header -->
   <header>
     <div class="header-inner">
       <a href="#" class="brand-group" id="brandLogoLink">
-        <div class="brand-logo-icon">🗳</div>
+        <div class="brand-logo-icon">🇮🇳</div>
         <div class="brand-title">
-          <h1>OpenBallot</h1>
-          <p>Decentralized Cryptographic Voting System</p>
+          <h1>OpenBallot Bharat</h1>
+          <p>Decentralized Cryptographic Voting System &bull; भारत</p>
         </div>
       </a>
 
@@ -95,7 +95,7 @@
           <div>
             <span class="system-badge badge-online" style="margin-bottom: 6px;">STATUS: ACTIVE</span>
             <h3 style="font-size: 18px; font-weight: 700; color: #1e3a8a;" id="dashActiveElectionTitle">
-              Campus Student Government President Election 2026
+              Lok Sabha Parliamentary Constituency General Election 2026
             </h3>
             <p style="font-size: 13px; color: #3b82f6; margin-top: 2px;">
               Proposal ID: <strong id="dashActiveProposalId">PROP-2026-01</strong> &bull; Standard Single Choice (Weight 1)
@@ -174,6 +174,9 @@
           <h2>Available Elections & Referendums</h2>
           <p>Official ballot proposals currently registered on the OpenBallot node.</p>
         </div>
+        <div>
+          <button class="btn btn-primary btn-sm" id="btnOpenNewElectionModal">+ Create Election / Referendum</button>
+        </div>
       </div>
 
       <div class="content-box">
@@ -240,21 +243,21 @@
         <div id="voteStepForm">
           <form id="castVoteForm">
             
-            <!-- Voter Authorization Profile Selection (Safe Demo UI, No Private Key Exposure) -->
+            <!-- Voter Authorization Profile Selection -->
             <div class="form-group">
-              <label class="form-label" for="voterProfileSelect">
-                Voter Authorization Profile
-              </label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label class="form-label" for="voterProfileSelect" style="margin-bottom: 0;">
+                  Voter Authorization Profile
+                </label>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnQuickCreateCitizen" style="font-size: 11.5px; padding: 3px 8px;">
+                  + Register New Citizen
+                </button>
+              </div>
               <select id="voterProfileSelect" class="form-control" style="font-weight: 600;">
-                <option value="alice">Alice (Authorized Student Voter)</option>
-                <option value="bob">Bob (Authorized Student Voter)</option>
-                <option value="charlie">Charlie (Authorized Student Voter)</option>
-                <option value="dave">Dave (Authorized Student Voter)</option>
-                <option value="eve">Eve (Authorized Student Voter)</option>
-                <option value="custom">Manual Credential Input (Enter Custom Hex Key)</option>
+                <option value="">Loading registered citizens...</option>
               </select>
               <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                Voter credentials from the official registry are used to generate the Ed25519 digital signature.
+                Select any registered citizen to authorize the ballot with their cryptographic Ed25519 signature.
               </p>
             </div>
 
@@ -715,13 +718,17 @@
     </section>
 
     <!-- =========================================================================
-         TAB 10: VOTER REGISTRY
+         TAB 10: CITIZEN & VOTER REGISTRY
          ========================================================================= -->
     <section id="tab-voters" class="page-tab-pane">
       <div class="page-header">
         <div>
-          <h2>Authorized Voter Registry</h2>
-          <p>Whitelisted public-key credentials eligible to cast ballots on this node.</p>
+          <h2>Citizen & Voter Registry</h2>
+          <p>Manage registered citizens, cryptographic credentials, and authorized voting whitelists.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary btn-sm" id="btnOpenCreateCitizenModal">+ Create New Citizen</button>
+          <button class="btn btn-secondary btn-sm" id="btnBulkGenerateCitizens" title="Generate 5 realistic test citizens for demo">⚡ Generate 5 Test Citizens</button>
         </div>
       </div>
 
@@ -729,22 +736,24 @@
         <!-- Voter List -->
         <div class="content-box">
           <div class="content-box-header">
-            <h3>Registered Whitelist</h3>
+            <h3>Whitelisted Citizens & Voters</h3>
             <span class="system-badge badge-valid" id="votersCountBadge">5 Authorized</span>
           </div>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th>Citizen Name</th>
+                  <th>District / Precinct</th>
                   <th>Voter ID (Public Key)</th>
-                  <th>Authorization</th>
-                  <th>Participation</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="votersTableBody">
                 <tr>
-                  <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                    Loading voter registry...
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                    Loading citizen registry...
                   </td>
                 </tr>
               </tbody>
@@ -752,36 +761,144 @@
           </div>
         </div>
 
-        <!-- Register New Voter Form -->
-        <div class="content-box">
-          <div class="content-box-header">
-            <h3>Authorize New Voter Public Key</h3>
-          </div>
-          <form id="registerVoterKeyForm">
-            <div class="form-group">
-              <label class="form-label" for="newVoterPubInput">Voter Public Key (64-char Hex)</label>
-              <input type="text" id="newVoterPubInput" class="form-control font-mono" placeholder="e.g. 58bea4c603be5452..." required>
+        <!-- Right Side: Forms -->
+        <div>
+          <!-- Quick Register Form -->
+          <div class="content-box" style="margin-bottom: 20px;">
+            <div class="content-box-header">
+              <h3>Fast Citizen Registration</h3>
             </div>
-            <button type="submit" class="btn btn-primary">Whitelist Voter</button>
-          </form>
-          <div style="margin-top: 24px; padding: 12px; background-color: var(--bg-subtle); border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-muted); line-height: 1.5;">
-            <strong>Security Rule:</strong> OpenBallot only accepts ballots signed by public keys that exist in the authorized whitelist (or all valid signatures if the registry is empty under an open election charter).
+            <form id="quickCitizenForm">
+              <div class="form-group">
+                <label class="form-label" for="quickCitizenName">Full Name</label>
+                <input type="text" id="quickCitizenName" class="form-control" placeholder="e.g. Maya Lin" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="quickCitizenDistrict">District / Precinct</label>
+                <input type="text" id="quickCitizenDistrict" class="form-control" placeholder="e.g. Science Precinct" value="District Alpha">
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%;">Generate Ed25519 Keys & Whitelist</button>
+            </form>
+          </div>
+
+          <!-- Authorize Existing Key Form -->
+          <div class="content-box">
+            <div class="content-box-header">
+              <h3>Authorize Existing Public Key</h3>
+            </div>
+            <form id="registerVoterKeyForm">
+              <div class="form-group">
+                <label class="form-label" for="newVoterPubInput">Voter Public Key (64-char Hex)</label>
+                <input type="text" id="newVoterPubInput" class="form-control font-mono" placeholder="e.g. 58bea4c603be5452..." required>
+              </div>
+              <button type="submit" class="btn btn-secondary" style="width: 100%;">Whitelist Public Key</button>
+            </form>
+            <div style="margin-top: 16px; padding: 10px; background-color: var(--bg-subtle); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+              <strong>Security Rule:</strong> OpenBallot only accepts ballots signed by public keys that exist in the authorized whitelist.
+            </div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- =========================================================================
-         TAB 11: SECURITY INFORMATION
+         TAB 11: SECURITY INFORMATION & ATTACK SANDBOX
          ========================================================================= -->
     <section id="tab-security" class="page-tab-pane">
       <div class="page-header">
         <div>
-          <h2>Security & Architecture Information</h2>
-          <p>Educational overview of the cryptographic mechanisms securing OpenBallot elections.</p>
+          <h2>Security Architecture & Interactive Attack Sandbox</h2>
+          <p>Test cryptographic defenses and verify tamper-proof properties in real-time.</p>
         </div>
       </div>
 
+      <!-- Interactive Attack Sandbox -->
+      <div class="content-box" style="margin-bottom: 24px; border-left: 4px solid var(--color-blue-primary);">
+        <div class="content-box-header">
+          <div>
+            <h3 style="font-size: 16px; color: var(--text-primary);">Interactive Cybersecurity Attack Simulator</h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
+              Trigger real cryptographic attack vectors against the local node to demonstrate how OpenBallot intercepts and rejects exploits.
+            </p>
+          </div>
+        </div>
+
+        <div class="attack-grid">
+          <div class="attack-card">
+            <div>
+              <div class="attack-card-header">
+                <span class="attack-icon">🔁</span>
+                <span class="attack-title">Double Voting Attack</span>
+              </div>
+              <p class="attack-desc">
+                Attempts to broadcast two signed ballots for the same proposal using identical citizen credentials.
+              </p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="runAttackSimulation('DOUBLE_VOTE')">
+              Execute Attack &rarr;
+            </button>
+          </div>
+
+          <div class="attack-card">
+            <div>
+              <div class="attack-card-header">
+                <span class="attack-icon">🚫</span>
+                <span class="attack-title">Unauthorized Voter</span>
+              </div>
+              <p class="attack-desc">
+                Generates a fresh rogue keypair and attempts to vote without being whitelisted by election authorities.
+              </p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="runAttackSimulation('UNAUTHORIZED_VOTER')">
+              Execute Attack &rarr;
+            </button>
+          </div>
+
+          <div class="attack-card">
+            <div>
+              <div class="attack-card-header">
+                <span class="attack-icon">✍️</span>
+                <span class="attack-title">Signature Tampering</span>
+              </div>
+              <p class="attack-desc">
+                Alters vote choice from YES to NO after cryptographic signing, breaking the SHA-256 ballot digest.
+              </p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="runAttackSimulation('SIGNATURE_TAMPER')">
+              Execute Attack &rarr;
+            </button>
+          </div>
+
+          <div class="attack-card">
+            <div>
+              <div class="attack-card-header">
+                <span class="attack-icon">⚖️</span>
+                <span class="attack-title">Weight Inflation</span>
+              </div>
+              <p class="attack-desc">
+                Attempts to submit a ballot with stake weight=5 to test constitutional egalitarian policy (1 citizen = 1 vote).
+              </p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="runAttackSimulation('WEIGHT_TAMPER')">
+              Execute Attack &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- Sandbox Output Terminal -->
+        <div style="margin-top: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Real-time Node Interception Diagnostic Console</span>
+            <button class="btn btn-secondary btn-sm" onclick="clearSandboxTerminal()" style="font-size: 11px; padding: 2px 8px;">Clear Console</button>
+          </div>
+          <div class="sandbox-terminal" id="sandboxConsole">
+            <div class="terminal-line terminal-tag-info">[SYSTEM] OpenBallot Security Sandbox ready. Select an attack vector above to test cryptographic defense boundaries.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Core Architecture Cards -->
+      <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">Cryptographic Security Principles</h3>
       <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
         <div class="content-box">
           <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: var(--color-blue-primary);">Ed25519 Cryptography</h3>
@@ -828,6 +945,160 @@
     </section>
 
   </main>
+
+  <!-- =========================================================================
+       MODALS: CITIZEN CREATION, CREDENTIALS, ELECTION CREATION
+       ========================================================================= -->
+
+  <!-- Modal 1: Create Citizen -->
+  <div id="modalCreateCitizen" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create & Whitelist New Citizen</h3>
+        <button class="modal-close-btn" onclick="closeModal('modalCreateCitizen')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="modalCreateCitizenForm">
+          <div class="form-group">
+            <label class="form-label" for="citizenFullName">Full Name *</label>
+            <input type="text" id="citizenFullName" class="form-control" placeholder="e.g. Dr. Maya Lin" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="citizenDistrict">District / Precinct / Faculty *</label>
+            <input type="text" id="citizenDistrict" class="form-control" placeholder="e.g. Engineering Precinct" value="District Alpha" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cryptographic Keypair Generation</label>
+            <div style="font-size: 13px; color: var(--text-muted); background: var(--bg-subtle); padding: 10px; border-radius: var(--radius-sm);">
+              🔒 An <strong>Ed25519</strong> elliptic curve keypair will be cryptographically generated. The public key will be registered on the blockchain whitelist, and you will receive the private key credential.
+            </div>
+          </div>
+          <div class="modal-footer" style="padding-left: 0; padding-right: 0; padding-bottom: 0;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modalCreateCitizen')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Generate Keys & Whitelist Citizen</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Citizen Credentials Card -->
+  <div id="modalCitizenCredentials" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🇮🇳 Digital Voter Identity Card (डिजिटल मतदाता पत्र)</h3>
+        <button class="modal-close-btn" onclick="closeModal('modalCitizenCredentials')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="credential-card">
+          <div class="credential-header">
+            <div>
+              <div style="font-size: 18px; font-weight: 700; color: #1e3a8a;" id="cardCitizenName">Citizen Name</div>
+              <div style="font-size: 13px; color: var(--color-blue-primary);" id="cardCitizenDistrict">Constituency</div>
+            </div>
+            <div class="credential-chip">🇮🇳 VERIFIED ELECTOR (EPIC)</div>
+          </div>
+
+          <div class="credential-field">
+            <div class="credential-label">Public Voter ID (Blockchain Identity)</div>
+            <div class="credential-value font-mono" id="cardCitizenVoterId" style="font-size: 12px;">-</div>
+          </div>
+
+          <div class="credential-field">
+            <div class="credential-label">Voter Secret Key (Private Signing Key)</div>
+            <div class="credential-value font-mono" id="cardCitizenSecretKey" style="font-size: 12px; color: #b91c1c;">-</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Keep this key secure. It is used to generate mathematical digital signatures.</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-primary" id="btnDownloadCitizenJson" style="flex: 1;">📥 Download Credentials (.json)</button>
+          <button class="btn btn-secondary" id="btnSelectCitizenForVote" style="flex: 1;">🗳 Use to Cast Vote Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Create New Election / Referendum -->
+  <div id="modalCreateElection" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create New Election / Referendum</h3>
+        <button class="modal-close-btn" onclick="closeModal('modalCreateElection')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="modalCreateElectionForm">
+          <div class="form-group">
+            <label class="form-label" for="electionProposalId">Proposal ID *</label>
+            <input type="text" id="electionProposalId" class="form-control font-mono" placeholder="e.g. PROP-2026-03" required>
+            <span style="font-size: 11px; color: var(--text-muted);">Unique uppercase identifier for the blockchain ledger</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="electionTitle">Election / Ballot Title *</label>
+            <input type="text" id="electionTitle" class="form-control" placeholder="e.g. Municipal Clean Energy Initiative 2026" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="electionCategory">Category</label>
+            <input type="text" id="electionCategory" class="form-control" placeholder="e.g. Municipal Governance, Campus, Faculty" value="Governance">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="electionDescription">Description & Charter Summary</label>
+            <textarea id="electionDescription" class="form-control" rows="3" placeholder="Explain the referendum question or elected position details..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="electionChoices">Ballot Choices (Comma-Separated)</label>
+            <input type="text" id="electionChoices" class="form-control" placeholder="YES, NO, ABSTAIN" value="YES, NO, ABSTAIN">
+            <span style="font-size: 11px; color: var(--text-muted);">Example: Candidate Alpha, Candidate Beta, Candidate Gamma, Abstain</span>
+          </div>
+          <div class="modal-footer" style="padding-left: 0; padding-right: 0; padding-bottom: 0;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('modalCreateElection')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Publish Referendum to Node</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Verifiable Vote Receipt -->
+  <div id="modalReceipt" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Official Cryptographic Ballot Receipt</h3>
+        <button class="modal-close-btn" onclick="closeModal('modalReceipt')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="credential-card" style="border-color: var(--success-green); background: #f0fdf4;">
+          <div class="credential-header">
+            <div>
+              <div style="font-size: 16px; font-weight: 700; color: #15803d;">Ballot Ingested & Verified</div>
+              <div style="font-size: 12px; color: var(--text-muted);" id="receiptTimestamp">Timestamp</div>
+            </div>
+            <div class="credential-chip" style="background-color: var(--success-green);">CRYPTOGRAPHIC PROOF</div>
+          </div>
+
+          <div class="credential-field">
+            <div class="credential-label">Vote Digest (SHA-256 Hash)</div>
+            <div class="credential-value font-mono" id="receiptVoteId" style="font-size: 12px; color: #15803d;">-</div>
+          </div>
+
+          <div class="credential-field">
+            <div class="credential-label">Proposal</div>
+            <div class="credential-value" id="receiptProposal">-</div>
+          </div>
+
+          <div class="credential-field">
+            <div class="credential-label">Verification Status</div>
+            <div class="credential-value" style="color: #2563eb;">Queued in Mempool &bull; Awaiting Next Block Sealing</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" onclick="copyReceiptDigest()" style="flex: 1;">📋 Copy Receipt Digest</button>
+          <button class="btn btn-secondary" onclick="verifyReceiptOnChain()" style="flex: 1;">🔍 Verify in Explorer</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Clean Unobtrusive Toast Notifications -->
   <div id="toast-container" aria-live="polite"></div>

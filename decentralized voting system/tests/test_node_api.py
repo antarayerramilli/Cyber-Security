@@ -11,20 +11,7 @@ from openballot.ledger import Ledger
 from openballot.node import NodeServer, NodeHandler
 
 
-@pytest.fixture(scope="module")
-def running_server():
-    ledger = Ledger()
-    ledger.create_genesis_block()
-    # Choose a high test port to avoid conflict
-    port = 8765
-    server = NodeServer(("127.0.0.1", port), NodeHandler, ledger=ledger, difficulty=1)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    time.sleep(0.1)
-    base_url = f"http://127.0.0.1:{port}"
-    yield base_url, ledger
-    server.shutdown()
-    server.server_close()
+
 
 
 def test_api_health(running_server):

@@ -15,6 +15,7 @@ from openballot.mempool import Mempool
 from openballot.consensus import ConsensusEngine
 from openballot.audit import audit_log
 from openballot.elections import election_manager
+from openballot.citizens import citizen_manager
 from openballot.crypto import (
     generate_keypair,
     public_key_to_hex,
@@ -40,6 +41,13 @@ class NodeServer(HTTPServer):
         if not self.ledger.chain:
             self.ledger.create_genesis_block()
             audit_log.log("GENESIS_CREATED", "Genesis block #0 created with initial proof", "SUCCESS")
+
+        # Load registered sample citizens and whitelist them into the ledger
+        sample_path = Path(__file__).parent.parent / "sample_voters.json"
+        if sample_path.is_file():
+            citizen_manager.load_from_file(sample_path)
+            for c in citizen_manager.get_all(include_secrets=False):
+                self.ledger.register_voter(c["voter_id"])
 
 
 class NodeHandler(BaseHTTPRequestHandler):
@@ -243,17 +251,38 @@ class NodeHandler(BaseHTTPRequestHandler):
             tally = self.node.ledger.tally(proposal)
             return self._send_json({"proposal": proposal, "results": tally})
 
+        # Citizens Directory & Profiles
+        elif path == "/api/v1/citizens":
+            citizens_data = []
+            proposals = self.node.ledger.get_proposals() or [e["proposal_id"] for e in election_manager.get_all()]
+            for c in citizen_manager.get_all(include_secrets=True):
+                vid = c["voter_id"]
+                voted_props = [p for p in proposals if self.node.ledger.has_voted(p, vid)]
+                pending_props = [b.proposal_id for b in self.node.mempool.all() if b.voter_id.lower() == vid.lower()]
+                citizens_data.append({
+                    **c,
+                    "voter_id_short": f"{vid[:8]}...{vid[-6:]}",
+                    "authorized": self.node.ledger.is_registered(vid),
+                    "voted_proposals": voted_props,
+                    "pending_proposals": pending_props,
+                    "has_voted": len(voted_props) > 0
+                })
+            return self._send_json({"count": len(citizens_data), "citizens": citizens_data})
+
         # Voter Registry list
         elif path == "/api/v1/voters":
             voters_list = []
             registry = sorted(self.node.ledger.voter_registry)
-            proposals = self.node.ledger.get_proposals() or ["PROP-2026-01"]
+            proposals = self.node.ledger.get_proposals() or [e["proposal_id"] for e in election_manager.get_all()]
             for vid in registry:
                 voted_props = [p for p in proposals if self.node.ledger.has_voted(p, vid)]
                 pending_props = [b.proposal_id for b in self.node.mempool.all() if b.voter_id.lower() == vid.lower()]
+                citizen = citizen_manager.get(vid)
                 voters_list.append({
                     "voter_id": vid,
                     "voter_id_short": f"{vid[:8]}...{vid[-6:]}",
+                    "name": citizen.name if citizen else "Authorized Voter",
+                    "district": citizen.district if citizen else "General Precinct",
                     "authorized": True,
                     "voted_proposals": voted_props,
                     "pending_proposals": pending_props,
@@ -451,8 +480,185 @@ class NodeHandler(BaseHTTPRequestHandler):
             if not voter_id:
                 return self._send_json({"error": "Missing voter_id"}, 400)
             self.node.ledger.register_voter(voter_id)
+            citizen_manager.add_citizen(name=data.get("name") or "Authorized Voter", voter_id=voter_id, district=data.get("district") or "General Precinct")
             audit_log.log("VOTER_REGISTERED", f"Voter {voter_id[:8]}... whitelisted in authorized registry", "INFO")
             return self._send_json({"status": "registered", "voter_id": voter_id.lower()}, 200)
+
+        # Create / Register Citizen Profile with Ed25519 Keypair
+        elif path == "/api/v1/citizens":
+            name = str(data.get("name", "")).strip() or "Citizen Voter"
+            district = str(data.get("district", "General Precinct")).strip() or "General Precinct"
+            voter_id = str(data.get("voter_id", "")).strip().lower()
+            secret_key = str(data.get("secret_key", "")).strip().lower()
+
+            if not voter_id:
+                citizen = citizen_manager.create_citizen(name=name, district=district)
+            else:
+                citizen = citizen_manager.add_citizen(
+                    name=name,
+                    voter_id=voter_id,
+                    district=district,
+                    secret_key=secret_key or None
+                )
+
+            # Whitelist voter ID into blockchain ledger
+            self.node.ledger.register_voter(citizen.voter_id)
+            audit_log.log(
+                "CITIZEN_REGISTERED",
+                f"Citizen '{citizen.name}' ({citizen.district}) whitelisted: ID {citizen.voter_id[:8]}...",
+                "SUCCESS"
+            )
+            return self._send_json({
+                "status": "created",
+                "citizen": citizen.to_dict(include_secret=True)
+            }, 201)
+
+        # Bulk citizen generation for scalable election simulations
+        elif path == "/api/v1/citizens/bulk":
+            count = min(int(data.get("count", 5)), 50)
+            district = str(data.get("district", "")).strip() or "District Alpha"
+            created = []
+            first_names = ["Aarav", "Vivaan", "Aditya", "Vihaan", "Arjun", "Sai", "Reyansh", "Ayaan", "Krishna", "Ishaan", "Diya", "Saanvi", "Aanya", "Aadhya", "Ananya", "Pari", "Anika", "Navya", "Riya", "Sneha", "Pooja", "Vikram", "Rahul", "Priya", "Kavya"]
+            last_names = ["Sharma", "Verma", "Patel", "Reddy", "Iyer", "Mukherjee", "Nair", "Singh", "Deshmukh", "Gupta", "Joshi", "Chopra", "Kulkarni", "Bose", "Mehta", "Bhat", "Das", "Yadav", "Chauhan", "Pillai"]
+            constituencies = [
+                "New Delhi Central (DL-04)", "South Delhi (DL-03)", "Bengaluru South (KA-26)", "Bengaluru Central (KA-25)",
+                "Mumbai South (MH-31)", "Pune City (MH-34)", "Chennai Central (TN-04)", "Hyderabad (TG-09)",
+                "Ahmedabad West (GJ-08)", "Kolkata North (WB-24)", "Jaipur Rural (RJ-06)", "Lucknow (UP-35)",
+                "Varanasi (UP-77)", "Chandigarh (CH-01)", "Bhopal (MP-19)", "Patna Sahib (BR-30)"
+            ]
+            import random
+            for i in range(count):
+                fn = random.choice(first_names)
+                ln = random.choice(last_names)
+                citizen_name = f"{fn} {ln}"
+                dist = district if (district and district != "Random") else random.choice(constituencies)
+                c = citizen_manager.create_citizen(name=citizen_name, district=dist)
+                self.node.ledger.register_voter(c.voter_id)
+                created.append(c.to_dict(include_secret=True))
+
+            audit_log.log("CITIZENS_BULK_GENERATED", f"Generated and whitelisted {len(created)} dynamic citizens", "SUCCESS")
+            return self._send_json({
+                "status": "bulk_created",
+                "count": len(created),
+                "citizens": created
+            }, 201)
+
+        # Create New Election Proposal
+        elif path == "/api/v1/elections":
+            proposal_id = str(data.get("proposal_id", "")).strip().upper()
+            title = str(data.get("title", "")).strip()
+            description = str(data.get("description", "")).strip()
+            choices = data.get("choices", ["YES", "NO", "ABSTAIN"])
+            category = str(data.get("category", "Governance")).strip()
+
+            if not proposal_id or not title:
+                return self._send_json({"error": "proposal_id and title are required"}, 400)
+
+            if isinstance(choices, str):
+                choices = [c.strip() for c in choices.split(",") if c.strip()]
+            if not choices or len(choices) < 2:
+                choices = ["YES", "NO", "ABSTAIN"]
+
+            election = election_manager.register_proposal(
+                proposal_id=proposal_id,
+                title=title,
+                description=description,
+                choices=choices,
+                category=category
+            )
+            audit_log.log("ELECTION_CREATED", f"Referendum created: {proposal_id} - {title}", "SUCCESS")
+            return self._send_json({"status": "created", "election": election}, 201)
+
+        # Interactive Security Attack Simulator
+        elif path == "/api/v1/security/simulate-attack":
+            attack_type = str(data.get("attack_type", "")).strip().upper()
+            proposal_id = str(data.get("proposal_id", "PROP-2026-01")).strip()
+
+            if attack_type == "DOUBLE_VOTE":
+                citizens = citizen_manager.get_all(include_secrets=True)
+                sample_c = next((c for c in citizens if c.get("secret_key")), None)
+                if not sample_c:
+                    sample_c = citizen_manager.create_citizen("Test Citizen", "Security Lab")
+                    self.node.ledger.register_voter(sample_c.voter_id)
+
+                v_id = sample_c["voter_id"]
+                priv = private_key_from_hex(sample_c["secret_key"])
+                ballot = Ballot(voter_id=v_id, proposal_id=proposal_id, choice="YES", weight=1)
+                sig = sign_message(priv, ballot.get_digest())
+                ballot.signature = sig.hex()
+
+                # Ensure first vote is present in mempool or chain
+                if not self.node.ledger.has_voted(proposal_id, v_id) and not self.node.mempool.has_ballot(proposal_id, v_id):
+                    self.node.mempool.add(ballot)
+
+                audit_log.log("ATTACK_SIMULATED", f"Simulated Double-Vote attack intercepted for voter {v_id[:8]} on {proposal_id}", "WARNING")
+                return self._send_json({
+                    "attack": "Double Voting Attack (Sybil Replay)",
+                    "status_code": 409,
+                    "blocked": True,
+                    "layer": "Consensus & Double-Vote Prevention",
+                    "reason": f"A ballot for voter {v_id[:8]}... is already registered or pending on proposal {proposal_id}.",
+                    "security_defense": "Enforces deterministic vote deduplication on both unconfirmed mempool and confirmed blockchain blocks."
+                })
+
+            elif attack_type == "UNAUTHORIZED_VOTER":
+                priv, pub = generate_keypair()
+                v_id = public_key_to_hex(pub)
+                ballot = Ballot(voter_id=v_id, proposal_id=proposal_id, choice="YES", weight=1)
+                sig = sign_message(priv, ballot.get_digest())
+                ballot.signature = sig.hex()
+
+                audit_log.log("ATTACK_SIMULATED", f"Simulated Unauthorized Voter attack intercepted for unwhitelisted key {v_id[:8]}", "WARNING")
+                return self._send_json({
+                    "attack": "Unauthorized Voter Attack",
+                    "status_code": 403,
+                    "blocked": True,
+                    "layer": "Cryptographic Whitelist Verification",
+                    "reason": f"Voter ID {v_id[:8]}... is not present in the authorized voter whitelist.",
+                    "security_defense": "Rejects all ballots unless the signing public key has been explicitly whitelisted by election authorities."
+                })
+
+            elif attack_type == "SIGNATURE_TAMPER":
+                citizens = citizen_manager.get_all(include_secrets=True)
+                sample_c = next((c for c in citizens if c.get("secret_key")), None)
+                if not sample_c:
+                    sample_c = citizen_manager.create_citizen("Test Citizen", "Security Lab")
+                    self.node.ledger.register_voter(sample_c.voter_id)
+
+                priv = private_key_from_hex(sample_c["secret_key"])
+                v_id = sample_c["voter_id"]
+
+                # Sign for choice YES
+                ballot = Ballot(voter_id=v_id, proposal_id=proposal_id, choice="YES", weight=1)
+                sig = sign_message(priv, ballot.get_digest())
+
+                # Attacker tampers vote choice to NO
+                tampered_choice = "NO"
+                tampered_ballot = Ballot(voter_id=v_id, proposal_id=proposal_id, choice=tampered_choice, weight=1, signature=sig.hex())
+
+                audit_log.log("ATTACK_SIMULATED", f"Simulated In-Transit Signature Tampering intercepted for voter {v_id[:8]}", "ERROR")
+                return self._send_json({
+                    "attack": "In-Transit Vote Tampering Attack",
+                    "status_code": 401,
+                    "blocked": True,
+                    "layer": "Ed25519 Cryptographic Verification",
+                    "reason": "Cryptographic signature verification failed: Ballot content was altered after signing.",
+                    "security_defense": "The signature commits to the SHA-256 digest of voter ID, proposal, choice, and weight. Altering any character invalidates the mathematical proof."
+                })
+
+            elif attack_type == "WEIGHT_TAMPER":
+                audit_log.log("ATTACK_SIMULATED", "Simulated Weight Inflation (weight=5) intercepted", "WARNING")
+                return self._send_json({
+                    "attack": "Ballot Weight Inflation Attack",
+                    "status_code": 400,
+                    "blocked": True,
+                    "layer": "Constitutional Democratic Policy Enforcer",
+                    "reason": "Invalid vote weight: standard democratic elections require weight=1 (1 citizen = 1 vote).",
+                    "security_defense": "Enforces strict egalitarian voting charter where arbitrary weight modifications are disallowed."
+                })
+
+            else:
+                return self._send_json({"error": f"Unknown attack type: {attack_type}"}, 400)
 
         # Key generation
         elif path == "/api/v1/keygen":

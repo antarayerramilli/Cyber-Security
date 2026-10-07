@@ -5,35 +5,41 @@
 
 const API_BASE = window.location.origin;
 
-// Pre-configured voter keyring for demonstration without displaying secrets in UI
-const VOTER_KEYRING = {
-  alice: {
-    name: "Alice (Authorized Student Voter)",
-    voter_id: "58bea4c603be5452406b8095010bc130a3af8b4be275766a1fdd0d3d13e35199",
-    secret_key: "e542aafc2d5d075b77428efea29318f6a8bc7269a022f17a06041dccf85cdb66"
+// Voter keyring store - loaded and merged dynamically from blockchain node
+let VOTER_KEYRING = {
+  aarav: {
+    name: "Aarav Sharma (New Delhi Central DL-04)",
+    voter_id: "c433600b71c72f5e8bc803964923e3e09fe2620703f6795f70bb0bc20630fc2f",
+    secret_key: "97e14f15e73dbed870da3b728feff658a8039757dfd2b1f074a38e351855a9b9",
+    district: "New Delhi Central (DL-04)"
   },
-  bob: {
-    name: "Bob (Authorized Student Voter)",
-    voter_id: "017617fc293d74fd6ad4da7e7378170b6146cdbcc06f8306d986f15f9e9df2f1",
-    secret_key: "c1f6d81570de7ae99fba14596e7560eddc0a62407b6521e927e1864891904ceb"
+  priya: {
+    name: "Priya Patel (Ahmedabad West GJ-08)",
+    voter_id: "88dbf9f66de9efc0d9a607e47a9ef03df07e2c9ef91040f666f29ef19ec35b91",
+    secret_key: "8a229db248c1e01fa320014b2d3bf98b1ef0ec1161d2d0b5e3d7a8d5f3089d38",
+    district: "Ahmedabad West (GJ-08)"
   },
-  charlie: {
-    name: "Charlie (Authorized Student Voter)",
-    voter_id: "c6cea9b05aed3dbf0c835664e134f885d86a005dfc521b8f3db10c404e1156ff",
-    secret_key: "ddadf45f3de084f3b0239a1d5b3a2bbce7f50659ca5689f32c69ac9d7e12bb83"
+  rahul: {
+    name: "Rahul Verma (Bengaluru South KA-26)",
+    voter_id: "68f6015c851728a64aa6eb5121e78c89b4f7380489aaefab9770131eeea69ff6",
+    secret_key: "93a265f188730bbf23eb2594a50d2e82506692289635e9f899e1bc86095fc13a",
+    district: "Bengaluru South (KA-26)"
   },
-  dave: {
-    name: "Dave (Authorized Student Voter)",
-    voter_id: "290b8419bbd8644df136f91f65d733f280e9391c41f466d2c299ff75d0b13959",
-    secret_key: "a1a16fedc4d440e876484764c05cd53580ef11a5f4ce4986a15fc53b0fe1566f"
+  ananya: {
+    name: "Ananya Iyer (Chennai Central TN-04)",
+    voter_id: "fcf0847a54a13e6ba29aa63b15c92c4b07111b51e065bf636b08f4c2e008ba92",
+    secret_key: "33d8d8bf291bd6cb1eb1cb3550b07b34b684980693a612501d51a660a5e8e7b1",
+    district: "Chennai Central (TN-04)"
   },
-  eve: {
-    name: "Eve (Authorized Student Voter)",
-    voter_id: "5b7f40c0fca1fd9c2b6a32dae64a6b16069072869a6b95c46627164d5c66d2f7",
-    secret_key: "7f304b52072920d3878d3270c10178da5a3e1b2c5157235238c31d9fb1c90b58"
+  rohan: {
+    name: "Rohan Mukherjee (Kolkata North WB-24)",
+    voter_id: "f8d101d7d6fd351ea22e2329241071da509311394145c110321d8a3ba5b8b939",
+    secret_key: "92759e48066fe98971f114c000ae605bf6ad59f5ae88a6d0b904fc49f506e890",
+    district: "Kolkata North (WB-24)"
   }
 };
 
+let activeCitizenForCard = null;
 let cachedChain = [];
 let cachedElections = [];
 let selectedChoice = "YES";
@@ -46,11 +52,20 @@ function shortenKey(key, start = 8, end = 6) {
   return `${key.substring(0, start)}...${key.substring(key.length - end)}`;
 }
 
-// Format Unix timestamp
+// Format Unix timestamp in Indian Standard Time (IST)
 function formatTimestamp(ts) {
   if (!ts) return "-";
   const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  }) + " IST";
 }
 
 // Simple Toast Notification
@@ -87,16 +102,31 @@ document.querySelectorAll(".nav-link").forEach(link => {
   });
 });
 
-document.getElementById("brandLogoLink").addEventListener("click", (e) => {
-  e.preventDefault();
-  navigateToTab("tab-dashboard");
-});
+const brandLink = document.getElementById("brandLogoLink");
+if (brandLink) {
+  brandLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigateToTab("tab-dashboard");
+  });
+}
 
-// Update banner clock
+// Update banner clock in Indian Standard Time (IST)
 function updateClock() {
   const now = new Date();
   const el = document.getElementById("bannerTimestamp");
-  if (el) el.textContent = "System Time: " + now.toUTCString();
+  if (el) {
+    const istTime = now.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    });
+    el.textContent = `Standard Time: ${istTime} (IST / UTC+05:30)`;
+  }
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -121,17 +151,58 @@ const customKeyGroup = document.getElementById("customKeyGroup");
 const inputCustomSecret = document.getElementById("inputCustomSecret");
 
 function updateVoterProfile() {
+  if (!voterProfileSelect) return;
   const val = voterProfileSelect.value;
   if (val === "custom") {
-    customKeyGroup.style.display = "block";
-    displayVoterId.value = "Will be derived from private key upon signing";
+    if (customKeyGroup) customKeyGroup.style.display = "block";
+    if (displayVoterId) displayVoterId.value = "Will be derived from private key upon signing";
   } else if (VOTER_KEYRING[val]) {
-    customKeyGroup.style.display = "none";
-    displayVoterId.value = VOTER_KEYRING[val].voter_id;
+    if (customKeyGroup) customKeyGroup.style.display = "none";
+    if (displayVoterId) displayVoterId.value = VOTER_KEYRING[val].voter_id;
   }
 }
-voterProfileSelect.addEventListener("change", updateVoterProfile);
-updateVoterProfile();
+
+function renderVoterSelectOptions() {
+  if (!voterProfileSelect) return;
+  const currentVal = voterProfileSelect.value;
+  const proposalId = document.getElementById("voteProposalSelect") ? document.getElementById("voteProposalSelect").value : "";
+
+  voterProfileSelect.innerHTML = "";
+
+  const keys = Object.keys(VOTER_KEYRING);
+  if (keys.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No registered citizens found";
+    voterProfileSelect.appendChild(opt);
+  } else {
+    for (const key of keys) {
+      const v = VOTER_KEYRING[key];
+      const opt = document.createElement("option");
+      opt.value = key;
+      const hasVoted = v.voted_proposals && v.voted_proposals.includes(proposalId);
+      opt.textContent = `${v.name || key}${hasVoted ? ' [ALREADY VOTED]' : ''}`;
+      voterProfileSelect.appendChild(opt);
+    }
+  }
+
+  const customOpt = document.createElement("option");
+  customOpt.value = "custom";
+  customOpt.textContent = "Manual Credential Input (Enter Custom Hex Key)";
+  voterProfileSelect.appendChild(customOpt);
+
+  if (currentVal && Array.from(voterProfileSelect.options).some(o => o.value === currentVal)) {
+    voterProfileSelect.value = currentVal;
+  } else if (keys.length > 0) {
+    voterProfileSelect.value = keys[0];
+  }
+  updateVoterProfile();
+}
+
+if (voterProfileSelect) {
+  voterProfileSelect.addEventListener("change", updateVoterProfile);
+  renderVoterSelectOptions();
+}
 
 // Helper: Open Cast Vote tab with pre-selected proposal
 function openVoteForProposal(proposalId) {
@@ -153,7 +224,8 @@ function openResultsForProposal(proposalId) {
 // Helper: Quick verify link
 function setVerifyQuery(voterKey) {
   if (VOTER_KEYRING[voterKey]) {
-    document.getElementById("verifyQueryInput").value = VOTER_KEYRING[voterKey].voter_id;
+    const input = document.getElementById("verifyQueryInput");
+    if (input) input.value = VOTER_KEYRING[voterKey].voter_id;
     document.getElementById("verifyVoteForm").dispatchEvent(new Event("submit"));
   }
 }
@@ -163,14 +235,15 @@ function setVerifyQuery(voterKey) {
 // =========================================================================
 async function refreshAllData() {
   try {
-    const [healthRes, chainRes, mempoolRes, electionsRes, votersRes, auditRes, peersRes] = await Promise.all([
+    const [healthRes, chainRes, mempoolRes, electionsRes, votersRes, auditRes, peersRes, citizensRes] = await Promise.all([
       fetch(`${API_BASE}/health`),
       fetch(`${API_BASE}/api/v1/chain`),
       fetch(`${API_BASE}/api/v1/mempool`),
       fetch(`${API_BASE}/api/v1/elections`),
       fetch(`${API_BASE}/api/v1/voters`),
       fetch(`${API_BASE}/api/v1/audit-log`),
-      fetch(`${API_BASE}/api/v1/peers`)
+      fetch(`${API_BASE}/api/v1/peers`),
+      fetch(`${API_BASE}/api/v1/citizens`)
     ]);
 
     if (!healthRes.ok) throw new Error("Node connection failed");
@@ -183,13 +256,33 @@ async function refreshAllData() {
     const auditData = await auditRes.json();
     const peersData = await peersRes.json();
 
+    if (citizensRes && citizensRes.ok) {
+      const citizensData = await citizensRes.json();
+      if (citizensData.citizens && citizensData.citizens.length > 0) {
+        citizensData.citizens.forEach(c => {
+          const slug = (c.name || '').toLowerCase().replace(/[^a-z0-9]/g, "_") || c.voter_id.substring(0, 8);
+          VOTER_KEYRING[slug] = {
+            name: `${c.name} (${c.district || 'Citizen'})`,
+            voter_id: c.voter_id,
+            secret_key: c.secret_key || (VOTER_KEYRING[slug] ? VOTER_KEYRING[slug].secret_key : ""),
+            district: c.district,
+            has_voted: c.has_voted,
+            voted_proposals: c.voted_proposals || []
+          };
+        });
+        renderVoterSelectOptions();
+      }
+    }
+
     cachedChain = chainData.chain || [];
     cachedElections = electionsData.elections || [];
 
     // Header Status
     const nodeBadge = document.getElementById("headerNodeBadge");
-    nodeBadge.className = "system-badge badge-online";
-    nodeBadge.innerHTML = `<span class="status-dot"></span><span>Node: <strong>ONLINE</strong></span>`;
+    if (nodeBadge) {
+      nodeBadge.className = "system-badge badge-online";
+      nodeBadge.innerHTML = `<span class="status-dot"></span><span>Node: <strong>ONLINE</strong></span>`;
+    }
 
     // Calculate total votes confirmed in chain
     let totalConfirmedVotes = 0;
@@ -198,16 +291,33 @@ async function refreshAllData() {
     });
 
     // Update Dashboard KPIs
-    document.getElementById("dashTotalVotes").textContent = totalConfirmedVotes;
-    document.getElementById("dashPendingVotes").textContent = mempoolData.count || 0;
-    document.getElementById("mempoolNavCount").textContent = mempoolData.count || 0;
-    document.getElementById("dashChainHeight").textContent = cachedChain.length || 0;
-    document.getElementById("dashActivePeers").textContent = (peersData.peers || []).length;
-    document.getElementById("dashNodeHealth").textContent = "ONLINE";
+    const elVotes = document.getElementById("dashTotalVotes");
+    if (elVotes) elVotes.textContent = totalConfirmedVotes;
+
+    const elMempool = document.getElementById("dashPendingVotes");
+    if (elMempool) elMempool.textContent = mempoolData.count || 0;
+
+    const elNavMempool = document.getElementById("mempoolNavCount");
+    if (elNavMempool) elNavMempool.textContent = mempoolData.count || 0;
+
+    const elHeight = document.getElementById("dashChainHeight");
+    if (elHeight) elHeight.textContent = cachedChain.length || 0;
+
+    const elPeers = document.getElementById("dashActivePeers");
+    if (elPeers) elPeers.textContent = (peersData.peers || []).length;
+
+    const elHealth = document.getElementById("dashNodeHealth");
+    if (elHealth) {
+      elHealth.textContent = "ONLINE";
+      elHealth.style.color = "var(--success-green)";
+    }
 
     // Network diagram label
-    document.getElementById("netDiagramLocalHeight").textContent = `Height: ${cachedChain.length}`;
-    document.getElementById("netPeerBadgeCount").textContent = `${(peersData.peers || []).length} Connected`;
+    const elDiagHeight = document.getElementById("netDiagramLocalHeight");
+    if (elDiagHeight) elDiagHeight.textContent = `Height: ${cachedChain.length}`;
+
+    const elDiagPeers = document.getElementById("netPeerBadgeCount");
+    if (elDiagPeers) elDiagPeers.textContent = `${(peersData.peers || []).length} Connected`;
 
     // Render Sub-Views
     renderRecentActivity(auditData.events || []);
@@ -222,10 +332,15 @@ async function refreshAllData() {
   } catch (err) {
     console.error("Data refresh error:", err);
     const nodeBadge = document.getElementById("headerNodeBadge");
-    nodeBadge.className = "system-badge badge-offline";
-    nodeBadge.innerHTML = `<span class="status-dot"></span><span>Node: <strong>OFFLINE</strong></span>`;
-    document.getElementById("dashNodeHealth").textContent = "OFFLINE";
-    document.getElementById("dashNodeHealth").style.color = "var(--error-red)";
+    if (nodeBadge) {
+      nodeBadge.className = "system-badge badge-offline";
+      nodeBadge.innerHTML = `<span class="status-dot"></span><span>Node: <strong>OFFLINE</strong></span>`;
+    }
+    const elHealth = document.getElementById("dashNodeHealth");
+    if (elHealth) {
+      elHealth.textContent = "OFFLINE";
+      elHealth.style.color = "var(--error-red)";
+    }
   }
 }
 
@@ -234,11 +349,11 @@ async function refreshAllData() {
 // -------------------------------------------------------------------------
 function renderRecentActivity(events) {
   const tbody = document.getElementById("dashRecentActivityBody");
+  if (!tbody) return;
   if (!events || events.length === 0) {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">No recent events recorded.</td></tr>`;
     return;
   }
-  // Take top 6 newest events
   const slice = events.slice(0, 6);
   tbody.innerHTML = slice.map(ev => {
     const badgeClass = ev.status === "SUCCESS" ? "badge-valid" : ev.status === "ERROR" ? "badge-offline" : ev.status === "WARNING" ? "badge-warning" : "badge-online";
@@ -258,6 +373,7 @@ function renderRecentActivity(events) {
 // -------------------------------------------------------------------------
 function renderElectionsTable(elections) {
   const tbody = document.getElementById("electionsTableBody");
+  if (!tbody) return;
   if (!elections || elections.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No elections configured on this node.</td></tr>`;
     return;
@@ -281,7 +397,6 @@ function renderElectionsTable(elections) {
     </tr>
   `).join("");
 
-  // Also update election select dropdown in voting tab
   const voteSel = document.getElementById("voteProposalSelect");
   const resSel = document.getElementById("resultsProposalFilter");
   if (voteSel && elections.length > 0) {
@@ -306,6 +421,7 @@ function renderElectionsTable(elections) {
 function renderBlockchain(chain) {
   const tbody = document.getElementById("blockchainTableBody");
   const diagram = document.getElementById("chainDiagramVisual");
+  if (!tbody || !diagram) return;
 
   if (!chain || chain.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">Blockchain is empty.</td></tr>`;
@@ -313,14 +429,13 @@ function renderBlockchain(chain) {
     return;
   }
 
-  // Render Horizontal Diagram (Genesis -> Block 1 -> Block 2 ...)
   diagram.innerHTML = chain.map((b, idx) => `
     <div class="chain-node ${idx === chain.length - 1 ? 'active-node' : ''}" onclick="showBlockDetails(${b.index})" style="cursor: pointer;" title="Click to view block details">
       <div style="font-size: 11px; font-weight: 700; color: ${b.index === 0 ? 'var(--success-green)' : 'var(--color-blue-primary)'};">
         ${b.index === 0 ? '🌱 GENESIS' : 'BLOCK #' + b.index}
       </div>
       <div class="font-mono" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-        ${shortKey(b.hash, 6, 4)}
+        ${shortenKey(b.hash, 6, 4)}
       </div>
       <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
         ${(b.ballots || []).length} votes
@@ -329,13 +444,12 @@ function renderBlockchain(chain) {
     ${idx < chain.length - 1 ? '<span class="chain-arrow">&rarr;</span>' : ''}
   `).join("");
 
-  // Render Table (Newest first)
   const reversed = [...chain].reverse();
   tbody.innerHTML = reversed.map(b => `
     <tr>
       <td><strong>#${b.index}</strong></td>
-      <td class="font-mono" title="${b.hash}">${shortKey(b.hash, 10, 8)}</td>
-      <td class="font-mono" style="color: var(--text-muted);" title="${b.prev_hash}">${shortKey(b.prev_hash, 8, 6)}</td>
+      <td class="font-mono" title="${b.hash}">${shortenKey(b.hash, 10, 8)}</td>
+      <td class="font-mono" style="color: var(--text-muted);" title="${b.prev_hash}">${shortenKey(b.prev_hash, 8, 6)}</td>
       <td><strong>${(b.ballots || []).length}</strong> votes</td>
       <td style="color: var(--text-muted); font-size: 12.5px;">${formatTimestamp(b.timestamp)}</td>
       <td class="font-mono">${b.nonce}</td>
@@ -353,6 +467,7 @@ function showBlockDetails(blockIndex) {
   if (!block) return;
 
   const panel = document.getElementById("blockDetailPanel");
+  if (!panel) return;
   document.getElementById("blockDetailTitle").textContent = `Block #${block.index} Complete Specification`;
 
   const tbody = document.getElementById("blockDetailBody");
@@ -385,11 +500,11 @@ function showBlockDetails(blockIndex) {
           <tbody>
             ${block.ballots.map(b => `
               <tr>
-                <td class="font-mono" title="${b.voter_id}">${shortKey(b.voter_id, 10, 8)}</td>
+                <td class="font-mono" title="${b.voter_id}">${shortenKey(b.voter_id, 10, 8)}</td>
                 <td class="font-mono"><strong>${b.proposal_id}</strong></td>
                 <td><span class="system-badge badge-valid">${b.choice}</span></td>
                 <td>${b.weight || 1}</td>
-                <td class="font-mono" style="color: var(--text-muted);" title="${b.signature}">${shortKey(b.signature, 12, 10)}</td>
+                <td class="font-mono" style="color: var(--text-muted);" title="${b.signature}">${shortenKey(b.signature, 12, 10)}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -408,8 +523,9 @@ function showBlockDetails(blockIndex) {
 function renderMempoolTable(ballots) {
   const tbody = document.getElementById("mempoolTableBody");
   const countBadge = document.getElementById("mempoolTableCount");
+  if (!tbody) return;
   const count = ballots ? ballots.length : 0;
-  countBadge.textContent = `Pending: ${count}`;
+  if (countBadge) countBadge.textContent = `Pending: ${count}`;
 
   if (!ballots || ballots.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Mempool is currently empty. Cast a vote to see it staged here.</td></tr>`;
@@ -420,7 +536,7 @@ function renderMempoolTable(ballots) {
     <tr>
       <td>${idx + 1}</td>
       <td class="font-mono"><strong>${b.proposal_id}</strong></td>
-      <td class="font-mono" title="${b.voter_id}">${shortKey(b.voter_id, 10, 8)}</td>
+      <td class="font-mono" title="${b.voter_id}">${shortenKey(b.voter_id, 10, 8)}</td>
       <td><span class="system-badge badge-valid">${b.choice}</span></td>
       <td>${b.weight || 1}</td>
       <td><span class="system-badge badge-valid">✓ Ed25519 VALID</span></td>
@@ -433,7 +549,9 @@ function renderMempoolTable(ballots) {
 // -------------------------------------------------------------------------
 function renderResults() {
   const container = document.getElementById("resultsCardContainer");
-  const filter = document.getElementById("resultsProposalFilter").value;
+  const filterEl = document.getElementById("resultsProposalFilter");
+  if (!container || !filterEl) return;
+  const filter = filterEl.value;
   const election = cachedElections.find(e => e.proposal_id === filter) || cachedElections[0];
 
   if (!election) {
@@ -466,9 +584,7 @@ function renderResults() {
         </div>
       </div>
 
-      <!-- Horizontal Proportion Bars -->
       <div style="margin: 24px 0;">
-        <!-- YES -->
         <div class="bar-wrapper">
           <div class="bar-label-row">
             <span>YES (In Favor)</span>
@@ -479,7 +595,6 @@ function renderResults() {
           </div>
         </div>
 
-        <!-- NO -->
         <div class="bar-wrapper">
           <div class="bar-label-row">
             <span>NO (Against)</span>
@@ -490,7 +605,6 @@ function renderResults() {
           </div>
         </div>
 
-        <!-- ABSTAIN -->
         <div class="bar-wrapper">
           <div class="bar-label-row">
             <span>ABSTAIN</span>
@@ -502,7 +616,6 @@ function renderResults() {
         </div>
       </div>
 
-      <!-- Verification Audit Badge -->
       <div style="border-top: 1px solid var(--border-color); padding-top: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--text-muted); flex-wrap: wrap; gap: 8px;">
         <div>
           🛡️ <em>Results calculated from ballots recorded on the verified ledger.</em>
@@ -514,13 +627,15 @@ function renderResults() {
     </div>
   `;
 }
-document.getElementById("resultsProposalFilter").addEventListener("change", renderResults);
+const resFilter = document.getElementById("resultsProposalFilter");
+if (resFilter) resFilter.addEventListener("change", renderResults);
 
 // -------------------------------------------------------------------------
 // RENDER: Audit Log Table
 // -------------------------------------------------------------------------
 function renderAuditLog(events) {
   const tbody = document.getElementById("auditLogTableBody");
+  if (!tbody) return;
   if (!events || events.length === 0) {
     tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No audit events recorded yet.</td></tr>`;
     return;
@@ -544,23 +659,27 @@ function renderAuditLog(events) {
 function renderVotersTable(voters) {
   const tbody = document.getElementById("votersTableBody");
   const countBadge = document.getElementById("votersCountBadge");
+  if (!tbody) return;
   const count = voters ? voters.length : 0;
-  countBadge.textContent = `${count} Authorized`;
+  if (countBadge) countBadge.textContent = `${count} Authorized`;
 
   if (!voters || voters.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">No voters registered in whitelist.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No citizens registered in whitelist.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = voters.map(v => `
     <tr>
+      <td><strong>${v.name || 'Authorized Citizen'}</strong></td>
+      <td style="color: var(--text-secondary); font-size: 13px;">${v.district || 'General Precinct'}</td>
       <td class="font-mono" title="${v.voter_id}">${v.voter_id_short}</td>
-      <td><span class="system-badge badge-valid">✓ Authorized</span></td>
       <td>
-        ${v.has_voted 
-          ? `<span class="system-badge badge-online">Voted (${v.voted_proposals.join(', ')})</span>`
-          : `<span class="system-badge badge-warning">Not Voted Yet</span>`
-        }
+        <span class="system-badge badge-valid">✓ Whitelisted</span>
+        ${v.has_voted ? `<span class="system-badge badge-online" style="margin-left: 4px; font-size: 11px;">Voted</span>` : ''}
+      </td>
+      <td style="text-align: right;">
+        <button class="btn btn-primary btn-sm" onclick="voteWithCitizen('${v.voter_id}')">Vote</button>
+        <button class="btn btn-secondary btn-sm" onclick="showCitizenCard('${v.voter_id}')" style="margin-left: 4px;">ID Card</button>
       </td>
     </tr>
   `).join("");
@@ -571,6 +690,7 @@ function renderVotersTable(voters) {
 // -------------------------------------------------------------------------
 function renderPeersTable(peers) {
   const tbody = document.getElementById("peerNodesTableBody");
+  if (!tbody) return;
   if (!peers || peers.length === 0) {
     tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 18px;">No external peers registered. Local node operating as authority.</td></tr>`;
     return;
@@ -590,116 +710,118 @@ function renderPeersTable(peers) {
 // =========================================================================
 // CAST BALLOT STEP-BY-STEP ACTIONS
 // =========================================================================
-document.getElementById("btnReviewVote").addEventListener("click", () => {
-  const profileKey = voterProfileSelect.value;
-  let secretKey = "";
-  let voterId = "";
+const btnReview = document.getElementById("btnReviewVote");
+if (btnReview) {
+  btnReview.addEventListener("click", () => {
+    const profileKey = voterProfileSelect.value;
+    let secretKey = "";
+    let voterId = "";
 
-  if (profileKey === "custom") {
-    secretKey = inputCustomSecret.value.trim();
-    if (!secretKey) {
-      showToast("Please enter your 64-character voter secret key", "error");
-      return;
-    }
-    voterId = "Deriving from private key...";
-  } else if (VOTER_KEYRING[profileKey]) {
-    secretKey = VOTER_KEYRING[profileKey].secret_key;
-    voterId = VOTER_KEYRING[profileKey].voter_id;
-  }
-
-  const proposalId = document.getElementById("voteProposalSelect").value;
-  const election = cachedElections.find(e => e.proposal_id === proposalId);
-
-  pendingVotePayload = {
-    profileKey,
-    secretKey,
-    voterId,
-    proposalId,
-    choice: selectedChoice,
-    weight: 1
-  };
-
-  // Populate confirm step
-  document.getElementById("confirmProposalId").textContent = proposalId;
-  document.getElementById("confirmElectionTitle").textContent = election ? election.title : proposalId;
-  document.getElementById("confirmSelectedChoice").textContent = selectedChoice;
-  document.getElementById("confirmVoterId").textContent = voterId;
-  document.getElementById("confirmDigest").textContent = `${voterId.substring(0, 16)}...:${proposalId}:${selectedChoice}:1`;
-
-  // Advance Stepper to Step 3
-  document.getElementById("stepIndicator1").className = "step-item completed";
-  document.getElementById("stepIndicator2").className = "step-item completed";
-  document.getElementById("stepIndicator3").className = "step-item active";
-
-  document.getElementById("voteStepForm").style.display = "none";
-  document.getElementById("voteConfirmDialog").style.display = "block";
-});
-
-document.getElementById("btnBackToForm").addEventListener("click", () => {
-  document.getElementById("stepIndicator1").className = "step-item active";
-  document.getElementById("stepIndicator2").className = "step-item";
-  document.getElementById("stepIndicator3").className = "step-item";
-
-  document.getElementById("voteStepForm").style.display = "block";
-  document.getElementById("voteConfirmDialog").style.display = "none";
-});
-
-document.getElementById("btnConfirmSubmit").addEventListener("click", async () => {
-  const btn = document.getElementById("btnConfirmSubmit");
-  btn.disabled = true;
-  btn.textContent = "Cryptographically Signing & Submitting...";
-
-  try {
-    if (!pendingVotePayload) throw new Error("Missing ballot payload");
-
-    // 1. Sign using server helper (safe demo flow without frontend key leaks)
-    const signRes = await fetch(`${API_BASE}/api/v1/sign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret_key: pendingVotePayload.secretKey,
-        proposal_id: pendingVotePayload.proposalId,
-        choice: pendingVotePayload.choice,
-        weight: 1
-      })
-    });
-    const signData = await signRes.json();
-    if (!signRes.ok || signData.error) {
-      throw new Error(signData.error || "Digital signature creation failed");
+    if (profileKey === "custom") {
+      secretKey = inputCustomSecret.value.trim();
+      if (!secretKey) {
+        showToast("Please enter your 64-character voter secret key", "error");
+        return;
+      }
+      voterId = "Deriving from private key...";
+    } else if (VOTER_KEYRING[profileKey]) {
+      secretKey = VOTER_KEYRING[profileKey].secret_key;
+      voterId = VOTER_KEYRING[profileKey].voter_id;
     }
 
-    // 2. Submit ballot to node mempool
-    const ballotRes = await fetch(`${API_BASE}/api/v1/ballots`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(signData.ballot)
-    });
-    const ballotData = await ballotRes.json();
-    if (!ballotRes.ok || ballotData.error) {
-      throw new Error(ballotData.error || "Ballot ingestion rejected");
-    }
+    const proposalId = document.getElementById("voteProposalSelect").value;
+    const election = cachedElections.find(e => e.proposal_id === proposalId);
 
-    // Populate Receipt
-    document.getElementById("receiptVoteId").textContent = ballotData.vote_id || signData.digest;
-    document.getElementById("receiptProposal").textContent = pendingVotePayload.proposalId;
+    pendingVotePayload = {
+      profileKey,
+      secretKey,
+      voterId,
+      proposalId,
+      choice: selectedChoice,
+      weight: 1
+    };
 
-    // Advance Stepper to Step 4
-    document.getElementById("stepIndicator3").className = "step-item completed";
-    document.getElementById("stepIndicator4").className = "step-item completed";
+    document.getElementById("confirmProposalId").textContent = proposalId;
+    document.getElementById("confirmElectionTitle").textContent = election ? election.title : proposalId;
+    document.getElementById("confirmSelectedChoice").textContent = selectedChoice;
+    document.getElementById("confirmVoterId").textContent = voterId;
+    document.getElementById("confirmDigest").textContent = `${voterId.substring(0, 16)}...:${proposalId}:${selectedChoice}:1`;
 
+    document.getElementById("stepIndicator1").className = "step-item completed";
+    document.getElementById("stepIndicator2").className = "step-item completed";
+    document.getElementById("stepIndicator3").className = "step-item active";
+
+    document.getElementById("voteStepForm").style.display = "none";
+    document.getElementById("voteConfirmDialog").style.display = "block";
+  });
+}
+
+const btnBack = document.getElementById("btnBackToForm");
+if (btnBack) {
+  btnBack.addEventListener("click", () => {
+    document.getElementById("stepIndicator1").className = "step-item active";
+    document.getElementById("stepIndicator2").className = "step-item";
+    document.getElementById("stepIndicator3").className = "step-item";
+
+    document.getElementById("voteStepForm").style.display = "block";
     document.getElementById("voteConfirmDialog").style.display = "none";
-    document.getElementById("voteSuccessReceipt").style.display = "block";
+  });
+}
 
-    showToast("Vote successfully submitted to mempool!", "success");
-    await refreshAllData();
+const btnConfirm = document.getElementById("btnConfirmSubmit");
+if (btnConfirm) {
+  btnConfirm.addEventListener("click", async () => {
+    btnConfirm.disabled = true;
+    btnConfirm.textContent = "Cryptographically Signing & Submitting...";
 
-  } catch (err) {
-    showToast(err.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "🔒 Authorize Digital Signature & Submit";
-  }
-});
+    try {
+      if (!pendingVotePayload) throw new Error("Missing ballot payload");
+
+      const signRes = await fetch(`${API_BASE}/api/v1/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          secret_key: pendingVotePayload.secretKey,
+          proposal_id: pendingVotePayload.proposalId,
+          choice: pendingVotePayload.choice,
+          weight: 1
+        })
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok || signData.error) {
+        throw new Error(signData.error || "Digital signature creation failed");
+      }
+
+      const ballotRes = await fetch(`${API_BASE}/api/v1/ballots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(signData.ballot)
+      });
+      const ballotData = await ballotRes.json();
+      if (!ballotRes.ok || ballotData.error) {
+        throw new Error(ballotData.error || "Ballot ingestion rejected");
+      }
+
+      document.getElementById("receiptVoteId").textContent = ballotData.vote_id || signData.digest;
+      document.getElementById("receiptProposal").textContent = pendingVotePayload.proposalId;
+
+      document.getElementById("stepIndicator3").className = "step-item completed";
+      document.getElementById("stepIndicator4").className = "step-item completed";
+
+      document.getElementById("voteConfirmDialog").style.display = "none";
+      document.getElementById("voteSuccessReceipt").style.display = "block";
+
+      showToast("Vote successfully submitted to mempool!", "success");
+      await refreshAllData();
+
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      btnConfirm.disabled = false;
+      btnConfirm.textContent = "🔒 Authorize Digital Signature & Submit";
+    }
+  });
+}
 
 function resetVoteForm() {
   document.getElementById("stepIndicator1").className = "step-item active";
@@ -716,205 +838,217 @@ function resetVoteForm() {
 // =========================================================================
 // VERIFY VOTE INDEPENDENTLY
 // =========================================================================
-document.getElementById("verifyVoteForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const query = document.getElementById("verifyQueryInput").value.trim();
-  if (!query) return;
+const verifyForm = document.getElementById("verifyVoteForm");
+if (verifyForm) {
+  verifyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const query = document.getElementById("verifyQueryInput").value.trim();
+    if (!query) return;
 
-  const resultBox = document.getElementById("verifyResultDisplay");
-  resultBox.style.display = "block";
-  resultBox.innerHTML = `<p style="color: var(--text-muted);">Verifying ballot on immutable ledger...</p>`;
+    const resultBox = document.getElementById("verifyResultDisplay");
+    resultBox.style.display = "block";
+    resultBox.innerHTML = `<p style="color: var(--text-muted);">Verifying ballot on immutable ledger...</p>`;
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/verify-ballot?query=${encodeURIComponent(query)}`);
-    const data = await res.json();
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/verify-ballot?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
 
-    if (!res.ok || !data.found) {
+      if (!res.ok || !data.found) {
+        resultBox.className = "verify-result-box invalid";
+        resultBox.innerHTML = `
+          <h4 style="font-size: 15px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">✗ Ballot Verification Failed</h4>
+          <p style="font-size: 13.5px; color: #7f1d1d; line-height: 1.5;">
+            ${data.message || 'No matching ballot was found on the confirmed blockchain or in the unconfirmed mempool.'}
+          </p>
+        `;
+        return;
+      }
+
+      const isOnChain = data.location === "CONFIRMED_BLOCK";
+      resultBox.className = "verify-result-box valid";
+      resultBox.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--success-border); padding-bottom: 10px;">
+          <h4 style="font-size: 16px; font-weight: 700; color: #166534;">✓ Cryptographic Ballot Verified</h4>
+          <span class="system-badge badge-valid">${isOnChain ? 'CONFIRMED ON-CHAIN' : 'PENDING MEMPOOL'}</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; margin-bottom: 14px;">
+          <div><strong>Proposal ID:</strong> <span class="font-mono">${data.proposal_id}</span></div>
+          <div><strong>Recorded Choice:</strong> <span class="system-badge badge-valid" style="font-size: 12px;">${data.choice}</span></div>
+          <div><strong>Block Number:</strong> ${isOnChain ? `Block #${data.block_index}` : 'Unmined (In Mempool)'}</div>
+          <div><strong>Timestamp:</strong> ${formatTimestamp(data.block_timestamp)}</div>
+        </div>
+
+        <div class="table-responsive" style="margin-top: 12px;">
+          <table class="data-table">
+            <tbody>
+              <tr><th style="width: 140px;">Voter Public ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.voter_id}</td></tr>
+              <tr><th>Vote Digest ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.vote_id}</td></tr>
+              <tr><th>Digital Signature</th><td class="font-mono" style="word-break: break-all; font-size: 11px; color: var(--text-muted);">${data.signature}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 14px; font-size: 12.5px; color: #15803d; line-height: 1.6;">
+          <div>✓ Digital Signature: <strong>Valid Ed25519 cryptographic authorization</strong></div>
+          <div>✓ Payload Continuity: <strong>Bound to proposal ${data.proposal_id}</strong></div>
+          <div>✓ Blockchain Integrity: <strong>Verified through Proof-of-Work Nakamoto consensus</strong></div>
+        </div>
+      `;
+
+    } catch (err) {
       resultBox.className = "verify-result-box invalid";
       resultBox.innerHTML = `
-        <h4 style="font-size: 15px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">✗ Ballot Verification Failed</h4>
-        <p style="font-size: 13.5px; color: #7f1d1d; line-height: 1.5;">
-          ${data.message || 'No matching ballot was found on the confirmed blockchain or in the unconfirmed mempool.'}
-        </p>
+        <h4 style="font-size: 15px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">✗ Error Connecting to Node</h4>
+        <p style="font-size: 13px; color: #7f1d1d;">${err.message}</p>
       `;
-      return;
     }
-
-    const isOnChain = data.location === "CONFIRMED_BLOCK";
-    resultBox.className = "verify-result-box valid";
-    resultBox.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--success-border); padding-bottom: 10px;">
-        <h4 style="font-size: 16px; font-weight: 700; color: #166534;">✓ Cryptographic Ballot Verified</h4>
-        <span class="system-badge badge-valid">${isOnChain ? 'CONFIRMED ON-CHAIN' : 'PENDING MEMPOOL'}</span>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; margin-bottom: 14px;">
-        <div><strong>Proposal ID:</strong> <span class="font-mono">${data.proposal_id}</span></div>
-        <div><strong>Recorded Choice:</strong> <span class="system-badge badge-valid" style="font-size: 12px;">${data.choice}</span></div>
-        <div><strong>Block Number:</strong> ${isOnChain ? `Block #${data.block_index}` : 'Unmined (In Mempool)'}</div>
-        <div><strong>Timestamp:</strong> ${formatTimestamp(data.block_timestamp)}</div>
-      </div>
-
-      <div class="table-responsive" style="margin-top: 12px;">
-        <table class="data-table">
-          <tbody>
-            <tr><th style="width: 140px;">Voter Public ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.voter_id}</td></tr>
-            <tr><th>Vote Digest ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.vote_id}</td></tr>
-            <tr><th>Digital Signature</th><td class="font-mono" style="word-break: break-all; font-size: 11px; color: var(--text-muted);">${data.signature}</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div style="margin-top: 14px; font-size: 12.5px; color: #15803d; line-height: 1.6;">
-        <div>✓ Digital Signature: <strong>Valid Ed25519 cryptographic authorization</strong></div>
-        <div>✓ Payload Continuity: <strong>Bound to proposal ${data.proposal_id}</strong></div>
-        <div>✓ Blockchain Integrity: <strong>Verified through Proof-of-Work Nakamoto consensus</strong></div>
-      </div>
-    `;
-
-  } catch (err) {
-    resultBox.className = "verify-result-box invalid";
-    resultBox.innerHTML = `
-      <h4 style="font-size: 15px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">✗ Error Connecting to Node</h4>
-      <p style="font-size: 13px; color: #7f1d1d;">${err.message}</p>
-    `;
-  }
-});
+  });
+}
 
 // =========================================================================
 // VERIFY BLOCKCHAIN INTEGRITY
 // =========================================================================
-document.getElementById("btnVerifyChain").addEventListener("click", async () => {
-  const btn = document.getElementById("btnVerifyChain");
-  btn.disabled = true;
-  btn.textContent = "Verifying Blockchain Integrity...";
+const btnVerifyChain = document.getElementById("btnVerifyChain");
+if (btnVerifyChain) {
+  btnVerifyChain.addEventListener("click", async () => {
+    btnVerifyChain.disabled = true;
+    btnVerifyChain.textContent = "Verifying Blockchain Integrity...";
 
-  const box = document.getElementById("chainVerificationResultBox");
-  box.style.display = "block";
-  box.innerHTML = `<div class="content-box"><p style="color: var(--text-muted);">Executing sequential block verification across entire ledger...</p></div>`;
+    const box = document.getElementById("chainVerificationResultBox");
+    box.style.display = "block";
+    box.innerHTML = `<div class="content-box"><p style="color: var(--text-muted);">Executing sequential block verification across entire ledger...</p></div>`;
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/verify-chain`);
-    const data = await res.json();
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/verify-chain`);
+      const data = await res.json();
 
-    const isAllValid = data.valid;
-    box.innerHTML = `
-      <div class="content-box ${isAllValid ? 'box-light-blue' : ''}" style="border-left: 4px solid ${isAllValid ? 'var(--success-green)' : 'var(--error-red)'};">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 style="font-size: 16px; font-weight: 700; color: ${isAllValid ? 'var(--success-green)' : 'var(--error-red)'};">
-            ${isAllValid ? '✓ Blockchain Integrity Verified' : '✗ Blockchain Integrity Compromised'}
-          </h3>
-          <span class="system-badge ${isAllValid ? 'badge-valid' : 'badge-offline'}">
-            ${data.total_blocks} Blocks Evaluated
-          </span>
-        </div>
+      const isAllValid = data.valid;
+      box.innerHTML = `
+        <div class="content-box ${isAllValid ? 'box-light-blue' : ''}" style="border-left: 4px solid ${isAllValid ? 'var(--success-green)' : 'var(--error-red)'};">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="font-size: 16px; font-weight: 700; color: ${isAllValid ? 'var(--success-green)' : 'var(--error-red)'};">
+              ${isAllValid ? '✓ Blockchain Integrity Verified' : '✗ Blockchain Integrity Compromised'}
+            </h3>
+            <span class="system-badge ${isAllValid ? 'badge-valid' : 'badge-offline'}">
+              ${data.total_blocks} Blocks Evaluated
+            </span>
+          </div>
 
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
-          ${data.message}. Every block hash matches the calculated SHA-256 payload, proof-of-work difficulty is satisfied, and cryptographic ballot signatures are untampered.
-        </p>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+            ${data.message}. Every block hash matches the calculated SHA-256 payload, proof-of-work difficulty is satisfied, and cryptographic ballot signatures are untampered.
+          </p>
 
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width: 80px;">Block</th>
-                <th>Validation Check</th>
-                <th style="width: 100px;">Status</th>
-                <th>Hash Digest</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(data.blocks || []).map(b => `
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
                 <tr>
-                  <td><strong>Block #${b.index}</strong></td>
-                  <td>${b.reason}</td>
-                  <td><span class="system-badge ${b.status === 'VALID' ? 'badge-valid' : 'badge-offline'}">${b.status}</span></td>
-                  <td class="font-mono" style="font-size: 11px;">${shortKey(b.hash, 10, 8)}</td>
+                  <th style="width: 80px;">Block</th>
+                  <th>Validation Check</th>
+                  <th style="width: 100px;">Status</th>
+                  <th>Hash Digest</th>
                 </tr>
-              `).join("")}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${(data.blocks || []).map(b => `
+                  <tr>
+                    <td><strong>Block #${b.index}</strong></td>
+                    <td>${b.reason}</td>
+                    <td><span class="system-badge ${b.status === 'VALID' ? 'badge-valid' : 'badge-offline'}">${b.status}</span></td>
+                    <td class="font-mono" style="font-size: 11px;">${shortenKey(b.hash, 10, 8)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    `;
+      `;
 
-    if (isAllValid) {
-      showToast("Blockchain integrity verified successfully!", "success");
-    } else {
-      showToast("Integrity check failed: tampering detected!", "error");
+      if (isAllValid) {
+        showToast("Blockchain integrity verified successfully!", "success");
+      } else {
+        showToast("Integrity check failed: tampering detected!", "error");
+      }
+
+    } catch (err) {
+      showToast(`Verification error: ${err.message}`, "error");
+    } finally {
+      btnVerifyChain.disabled = false;
+      btnVerifyChain.textContent = "🛡️ Verify Blockchain Integrity";
     }
-
-  } catch (err) {
-    showToast(`Verification error: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "🛡️ Verify Blockchain Integrity";
-  }
-});
+  });
+}
 
 // =========================================================================
 // MINE BLOCK ACTION
 // =========================================================================
-document.getElementById("btnMineBlockAction").addEventListener("click", async () => {
-  const btn = document.getElementById("btnMineBlockAction");
-  const banner = document.getElementById("miningStatusBanner");
-  const text = document.getElementById("miningStatusText");
+const btnMine = document.getElementById("btnMineBlockAction");
+if (btnMine) {
+  btnMine.addEventListener("click", async () => {
+    const banner = document.getElementById("miningStatusBanner");
+    const text = document.getElementById("miningStatusText");
 
-  btn.disabled = true;
-  banner.style.display = "block";
-  text.innerHTML = "Collecting ballots... Finding valid nonce (Proof-of-Work)...";
+    btnMine.disabled = true;
+    if (banner) banner.style.display = "block";
+    if (text) text.innerHTML = "Collecting ballots... Finding valid nonce (Proof-of-Work)...";
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/mine`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Mining failed");
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/mine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Mining failed");
 
-    text.innerHTML = `
-      <span style="color: var(--success-green); font-weight: 700;">✓ Block #${data.block_index} Created Successfully</span>
-      <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px;">
-        Hash: <code class="font-mono">${data.block_hash}</code> &bull; Nonce: <strong>${data.nonce}</strong> &bull; Sealed Ballots: <strong>${data.ballots_sealed}</strong>
-      </div>
-    `;
-    showToast(`Block #${data.block_index} successfully mined!`, "success");
-    await refreshAllData();
+      if (text) {
+        text.innerHTML = `
+          <span style="color: var(--success-green); font-weight: 700;">✓ Block #${data.block_index} Created Successfully</span>
+          <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px;">
+            Hash: <code class="font-mono">${data.block_hash}</code> &bull; Nonce: <strong>${data.nonce}</strong> &bull; Sealed Ballots: <strong>${data.ballots_sealed}</strong>
+          </div>
+        `;
+      }
+      showToast(`Block #${data.block_index} successfully mined!`, "success");
+      await refreshAllData();
 
-  } catch (err) {
-    text.innerHTML = `<span style="color: var(--error-red);">Mining error: ${err.message}</span>`;
-    showToast(err.message, "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
+    } catch (err) {
+      if (text) text.innerHTML = `<span style="color: var(--error-red);">Mining error: ${err.message}</span>`;
+      showToast(err.message, "error");
+    } finally {
+      btnMine.disabled = false;
+    }
+  });
+}
 
 // =========================================================================
 // PEER & NETWORK ACTIONS
 // =========================================================================
-document.getElementById("addPeerForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = document.getElementById("peerUrlInput");
-  const url = input.value.trim();
-  if (!url) return;
+const peerForm = document.getElementById("addPeerForm");
+if (peerForm) {
+  peerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("peerUrlInput");
+    const url = input.value.trim();
+    if (!url) return;
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/peers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ peer: url })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      showToast(`Connected peer: ${url}`, "success");
-      input.value = "";
-      await refreshAllData();
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/peers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ peer: url })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Connected peer: ${url}`, "success");
+        input.value = "";
+        await refreshAllData();
+      }
+    } catch (err) {
+      showToast(err.message, "error");
     }
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-});
+  });
+}
 
 async function removePeer(peerUrl) {
   try {
@@ -932,61 +1066,352 @@ async function removePeer(peerUrl) {
   }
 }
 
-document.getElementById("btnSyncChain").addEventListener("click", async () => {
-  showToast("Contacting peers for chain synchronization...", "info");
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
-    });
-    const data = await res.json();
-    if (data.synced) {
-      showToast("Adopted longer authoritative branch from peer!", "success");
-    } else {
-      showToast(`Local ledger is currently up-to-date (Height: ${data.current_length})`, "info");
+const btnSync = document.getElementById("btnSyncChain");
+if (btnSync) {
+  btnSync.addEventListener("click", async () => {
+    showToast("Contacting peers for chain synchronization...", "info");
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (data.synced) {
+        showToast("Adopted longer authoritative branch from peer!", "success");
+      } else {
+        showToast(`Local ledger is currently up-to-date (Height: ${data.current_length})`, "info");
+      }
+      await refreshAllData();
+    } catch (err) {
+      showToast(`Sync failed: ${err.message}`, "error");
     }
-    await refreshAllData();
-  } catch (err) {
-    showToast(`Sync failed: ${err.message}`, "error");
-  }
-});
+  });
+}
 
 // =========================================================================
 // VOTER REGISTRATION ACTION
 // =========================================================================
-document.getElementById("registerVoterKeyForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = document.getElementById("newVoterPubInput");
-  const vid = input.value.trim();
-  if (!vid) return;
+const regKeyForm = document.getElementById("registerVoterKeyForm");
+if (regKeyForm) {
+  regKeyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("newVoterPubInput");
+    const vid = input.value.trim();
+    if (!vid) return;
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voter_id: vid })
-    });
-    if (res.ok) {
-      showToast(`Voter ${shortKey(vid)} successfully authorized!`, "success");
-      input.value = "";
-      await refreshAllData();
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voter_id: vid })
+      });
+      if (res.ok) {
+        showToast(`Voter ${shortenKey(vid)} successfully authorized!`, "success");
+        input.value = "";
+        await refreshAllData();
+      }
+    } catch (err) {
+      showToast(err.message, "error");
     }
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-});
+  });
+}
 
 // Quick refresh button
-document.getElementById("btnQuickRefresh").addEventListener("click", async () => {
-  await refreshAllData();
-  showToast("Node state refreshed", "info");
-});
+const btnRefresh = document.getElementById("btnQuickRefresh");
+if (btnRefresh) {
+  btnRefresh.addEventListener("click", async () => {
+    await refreshAllData();
+    showToast("Node state refreshed", "info");
+  });
+}
 
-document.getElementById("btnRefreshAudit").addEventListener("click", async () => {
-  await refreshAllData();
-  showToast("Audit log refreshed", "info");
-});
+const btnAudit = document.getElementById("btnRefreshAudit");
+if (btnAudit) {
+  btnAudit.addEventListener("click", async () => {
+    await refreshAllData();
+    showToast("Audit log refreshed", "info");
+  });
+}
+
+// =========================================================================
+// MODAL SYSTEM & CITIZEN INTERACTIONS
+// =========================================================================
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "flex";
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = "none";
+}
+
+// Select a citizen and switch to voting tab
+function voteWithCitizen(voterId) {
+  const slug = Object.keys(VOTER_KEYRING).find(k => VOTER_KEYRING[k].voter_id.toLowerCase() === voterId.toLowerCase());
+  if (slug && voterProfileSelect) {
+    voterProfileSelect.value = slug;
+    updateVoterProfile();
+  }
+  navigateToTab("tab-cast-vote");
+  showToast("Selected citizen for voting authorization", "info");
+}
+
+// Show citizen digital ID card
+function showCitizenCard(voterId) {
+  const slug = Object.keys(VOTER_KEYRING).find(k => VOTER_KEYRING[k].voter_id.toLowerCase() === voterId.toLowerCase());
+  const citizen = slug ? VOTER_KEYRING[slug] : null;
+
+  if (citizen) {
+    activeCitizenForCard = citizen;
+    document.getElementById("cardCitizenName").textContent = citizen.name;
+    document.getElementById("cardCitizenDistrict").textContent = citizen.district || "General Precinct";
+    document.getElementById("cardCitizenVoterId").textContent = citizen.voter_id;
+    document.getElementById("cardCitizenSecretKey").textContent = citizen.secret_key || "Stored encrypted on client";
+  } else {
+    activeCitizenForCard = { voter_id: voterId, name: "Authorized Voter", district: "General Precinct" };
+    document.getElementById("cardCitizenName").textContent = "Authorized Voter";
+    document.getElementById("cardCitizenDistrict").textContent = "General Precinct";
+    document.getElementById("cardCitizenVoterId").textContent = voterId;
+    document.getElementById("cardCitizenSecretKey").textContent = "Unknown (Registered via external public key)";
+  }
+  openModal("modalCitizenCredentials");
+}
+
+// Download credential JSON
+const btnDownloadJson = document.getElementById("btnDownloadCitizenJson");
+if (btnDownloadJson) {
+  btnDownloadJson.addEventListener("click", () => {
+    if (!activeCitizenForCard) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeCitizenForCard, null, 2));
+    const a = document.createElement("a");
+    a.href = dataStr;
+    const safeName = (activeCitizenForCard.name || "citizen").toLowerCase().replace(/[^a-z0-9]/g, "_");
+    a.download = `openballot_credentials_${safeName}.json`;
+    a.click();
+    showToast("Downloaded digital voter credentials!", "success");
+  });
+}
+
+// Use selected citizen to vote
+const btnSelectForVote = document.getElementById("btnSelectCitizenForVote");
+if (btnSelectForVote) {
+  btnSelectForVote.addEventListener("click", () => {
+    if (activeCitizenForCard) {
+      voteWithCitizen(activeCitizenForCard.voter_id);
+      closeModal("modalCitizenCredentials");
+    }
+  });
+}
+
+// Quick Citizen Registration form
+const quickCitForm = document.getElementById("quickCitizenForm");
+if (quickCitForm) {
+  quickCitForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("quickCitizenName").value.trim();
+    const district = document.getElementById("quickCitizenDistrict").value.trim();
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/citizens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, district })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Citizen creation failed");
+
+      showToast(`Citizen '${name}' created and whitelisted!`, "success");
+      quickCitForm.reset();
+      await refreshAllData();
+      showCitizenCard(data.citizen.voter_id);
+    } catch (err) {
+      showToast(`Registration error: ${err.message}`, "error");
+    }
+  });
+}
+
+// Modal Citizen Registration form
+const modalCitForm = document.getElementById("modalCreateCitizenForm");
+if (modalCitForm) {
+  modalCitForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("citizenFullName").value.trim();
+    const district = document.getElementById("citizenDistrict").value.trim();
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/citizens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, district })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Citizen creation failed");
+
+      closeModal("modalCreateCitizen");
+      showToast(`Citizen '${name}' registered with Ed25519 keypair!`, "success");
+      modalCitForm.reset();
+      await refreshAllData();
+      showCitizenCard(data.citizen.voter_id);
+    } catch (err) {
+      showToast(`Registration error: ${err.message}`, "error");
+    }
+  });
+}
+
+// Modal Triggers
+const btnOpenCreateModal = document.getElementById("btnOpenCreateCitizenModal");
+if (btnOpenCreateModal) {
+  btnOpenCreateModal.addEventListener("click", () => openModal("modalCreateCitizen"));
+}
+
+const btnQuickCit = document.getElementById("btnQuickCreateCitizen");
+if (btnQuickCit) {
+  btnQuickCit.addEventListener("click", () => openModal("modalCreateCitizen"));
+}
+
+// Bulk Citizens generation
+const btnBulkCit = document.getElementById("btnBulkGenerateCitizens");
+if (btnBulkCit) {
+  btnBulkCit.addEventListener("click", async () => {
+    btnBulkCit.disabled = true;
+    showToast("Generating 5 realistic test citizens...", "info");
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/citizens/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: 5, district: "Random" })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk generation failed");
+
+      showToast(`Generated & whitelisted ${data.count} citizens!`, "success");
+      await refreshAllData();
+    } catch (err) {
+      showToast(`Error: ${err.message}`, "error");
+    } finally {
+      btnBulkCit.disabled = false;
+    }
+  });
+}
+
+// Create Election Modal & Action
+const btnOpenNewElec = document.getElementById("btnOpenNewElectionModal");
+if (btnOpenNewElec) {
+  btnOpenNewElec.addEventListener("click", () => openModal("modalCreateElection"));
+}
+
+const formNewElec = document.getElementById("modalCreateElectionForm");
+if (formNewElec) {
+  formNewElec.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pid = document.getElementById("electionProposalId").value.trim().toUpperCase();
+    const title = document.getElementById("electionTitle").value.trim();
+    const desc = document.getElementById("electionDescription").value.trim();
+    const cat = document.getElementById("electionCategory").value.trim();
+    const choices = document.getElementById("electionChoices").value.trim();
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/elections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposal_id: pid,
+          title: title,
+          description: desc,
+          category: cat,
+          choices: choices
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create election");
+
+      closeModal("modalCreateElection");
+      showToast(`Election '${pid}' successfully created!`, "success");
+      formNewElec.reset();
+      await refreshAllData();
+    } catch (err) {
+      showToast(`Creation error: ${err.message}`, "error");
+    }
+  });
+}
+
+// =========================================================================
+// INTERACTIVE CYBERSECURITY ATTACK SIMULATOR
+// =========================================================================
+async function runAttackSimulation(attackType) {
+  const terminal = document.getElementById("sandboxConsole");
+  if (!terminal) return;
+
+  const timestamp = new Date().toLocaleTimeString();
+  const initLine = document.createElement("div");
+  initLine.className = "terminal-line terminal-tag-info";
+  initLine.textContent = `[${timestamp}] Launching exploit test payload: [${attackType}]...`;
+  terminal.appendChild(initLine);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/security/simulate-attack`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attack_type: attackType })
+    });
+    const data = await res.json();
+
+    const resultLine = document.createElement("div");
+    resultLine.className = "terminal-line terminal-tag-blocked";
+    resultLine.innerHTML = `🛡️ [INTERCEPTED] ${data.attack} | HTTP Code: <strong>${data.status_code}</strong> | Layer: <strong>${data.layer}</strong>`;
+    terminal.appendChild(resultLine);
+
+    const reasonLine = document.createElement("div");
+    reasonLine.className = "terminal-line terminal-tag-muted";
+    reasonLine.textContent = `   Rejection Reason: "${data.reason}"`;
+    terminal.appendChild(reasonLine);
+
+    const defenseLine = document.createElement("div");
+    defenseLine.className = "terminal-line terminal-tag-success";
+    defenseLine.textContent = `   Security Defense: ${data.security_defense}`;
+    terminal.appendChild(defenseLine);
+
+    terminal.scrollTop = terminal.scrollHeight;
+    showToast(`Attack successfully intercepted by ${data.layer}!`, "success");
+    await refreshAllData();
+  } catch (err) {
+    const errLine = document.createElement("div");
+    errLine.className = "terminal-line terminal-tag-blocked";
+    errLine.textContent = `[ERROR] Failed to run simulation: ${err.message}`;
+    terminal.appendChild(errLine);
+  }
+}
+
+function clearSandboxTerminal() {
+  const terminal = document.getElementById("sandboxConsole");
+  if (terminal) {
+    terminal.innerHTML = `<div class="terminal-line terminal-tag-info">[SYSTEM] Console cleared. OpenBallot defense monitoring active.</div>`;
+  }
+}
+
+// Receipt helper actions
+function copyReceiptDigest() {
+  const el = document.getElementById("receiptVoteId");
+  const digest = el ? el.textContent : "";
+  if (digest && digest !== "-") {
+    navigator.clipboard.writeText(digest);
+    showToast("Copied vote hash digest to clipboard!", "info");
+  }
+}
+
+function verifyReceiptOnChain() {
+  const el = document.getElementById("receiptVoteId");
+  const digest = el ? el.textContent : "";
+  if (digest && digest !== "-") {
+    const input = document.getElementById("verifyQueryInput");
+    if (input) input.value = digest;
+    closeModal("modalReceipt");
+    navigateToTab("tab-verify-vote");
+    document.getElementById("verifyVoteForm").dispatchEvent(new Event("submit"));
+  }
+}
 
 // Initialize on page load and poll every 4 seconds
 window.addEventListener("DOMContentLoaded", () => {

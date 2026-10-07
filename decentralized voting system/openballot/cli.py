@@ -104,6 +104,22 @@ def cmd_status(args):
     print(json.dumps(res, indent=2))
 
 
+def cmd_citizen_create(args):
+    endpoint = f"{args.node.rstrip('/')}/api/v1/citizens"
+    payload = {"name": args.name, "district": args.district}
+    res = _post_json(endpoint, payload)
+    print("Citizen Created & Whitelisted:")
+    print(json.dumps(res, indent=2))
+
+
+def cmd_citizen_list(args):
+    endpoint = f"{args.node.rstrip('/')}/api/v1/citizens"
+    res = _get_json(endpoint)
+    print(f"Registered Citizens ({res.get('count', 0)}):")
+    for c in res.get("citizens", []):
+        print(f"  {c['name']:<20} | {c['district']:<18} | ID: {c['voter_id'][:16]}... | Voted: {c['has_voted']}")
+
+
 def cmd_serve(args):
     from pathlib import Path
     ledger = Ledger()
@@ -172,6 +188,18 @@ def main():
     p_serve.add_argument("--port", type=int, default=8000, help="Listen port")
     p_serve.add_argument("--difficulty", type=int, default=1, help="PoW block difficulty")
     p_serve.set_defaults(func=cmd_serve)
+
+    # citizen-create
+    p_cit_create = subparsers.add_parser("citizen-create", help="Create and whitelist a new citizen")
+    p_cit_create.add_argument("--name", required=True, help="Citizen full name")
+    p_cit_create.add_argument("--district", default="General Precinct", help="Citizen district/precinct")
+    p_cit_create.add_argument("--node", default="http://127.0.0.1:8000", help="Node URL")
+    p_cit_create.set_defaults(func=cmd_citizen_create)
+
+    # citizen-list
+    p_cit_list = subparsers.add_parser("citizen-list", help="List all registered citizens")
+    p_cit_list.add_argument("--node", default="http://127.0.0.1:8000", help="Node URL")
+    p_cit_list.set_defaults(func=cmd_citizen_list)
 
     parsed_args = parser.parse_args()
     parsed_args.func(parsed_args)
