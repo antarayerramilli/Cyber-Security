@@ -84,8 +84,8 @@ class CitizenManager:
             secret_key=priv_hex
         )
 
-    def load_from_file(self, filepath: Path):
-        self.persistence_file = filepath
+    def load_from_file(self, filepath: Path, persist: bool = False):
+        self.persistence_file = filepath if persist else None
         if not filepath.is_file():
             return
         try:

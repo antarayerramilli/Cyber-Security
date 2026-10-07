@@ -1,11 +1,7 @@
 import json
 import urllib.request
-import urllib.error
-import pytest
 
-from openballot.citizens import CitizenManager, Citizen
-from openballot.ledger import Ledger
-from openballot.node import NodeServer, NodeHandler
+from openballot.citizens import CitizenManager
 
 
 def test_citizen_creation_and_keypair():

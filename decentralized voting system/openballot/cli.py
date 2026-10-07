@@ -3,7 +3,6 @@ import json
 import sys
 import urllib.request
 import urllib.error
-from typing import Optional
 
 from openballot.crypto import (
     generate_keypair,

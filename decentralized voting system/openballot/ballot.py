@@ -1,5 +1,5 @@
 import hashlib
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from openballot.crypto import verify_signature, public_key_from_hex
 
 

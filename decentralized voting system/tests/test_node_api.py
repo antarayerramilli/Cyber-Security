@@ -1,14 +1,10 @@
 import json
-import threading
-import time
 import urllib.request
 import urllib.error
 import pytest
 
 from openballot.crypto import generate_keypair, public_key_to_hex, sign_message
 from openballot.ballot import Ballot
-from openballot.ledger import Ledger
-from openballot.node import NodeServer, NodeHandler
 
 
 
@@ -58,6 +54,8 @@ def test_api_ballot_submission_and_weight_validation(running_server):
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req_bad)
     assert exc_info.value.code == 400
+    exc_info.value.read()
+    exc_info.value.close()
 
     # 2. Valid ballot submission
     ballot = Ballot(vid, "PROP-2026-01", "YES", weight=1)
@@ -83,6 +81,8 @@ def test_api_ballot_submission_and_weight_validation(running_server):
     with pytest.raises(urllib.error.HTTPError) as exc_dup:
         urllib.request.urlopen(req_dup)
     assert exc_dup.value.code == 409
+    exc_dup.value.read()
+    exc_dup.value.close()
 
 
 def test_api_verify_ballot_and_chain(running_server):

@@ -1,8 +1,6 @@
 import json
 import logging
 import mimetypes
-import urllib.request
-import urllib.error
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs

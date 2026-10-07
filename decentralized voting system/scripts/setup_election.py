@@ -5,7 +5,6 @@ Utility script to generate sample voters/citizens for an election demo.
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
