@@ -5,45 +5,129 @@
 
 const API_BASE = window.location.origin;
 
-// Voter keyring store - loaded and merged dynamically from blockchain node
+// Voter keyring store - synchronized dynamically with blockchain node & sample_voters.json
 let VOTER_KEYRING = {
-  aarav: {
+  aarav_sharma: {
     name: "Aarav Sharma (New Delhi Central DL-04)",
-    voter_id: "c433600b71c72f5e8bc803964923e3e09fe2620703f6795f70bb0bc20630fc2f",
-    secret_key: "97e14f15e73dbed870da3b728feff658a8039757dfd2b1f074a38e351855a9b9",
+    voter_id: "c433600b71c72f5e75287f4e31e9f3ba4bbcc4e1b6fec236e4d95fc9dd40dbd8",
+    secret_key: "97e14f15e73dbed87cfbb55623bb232febdda7e14b20ce7f361201b4871c3e37",
     district: "New Delhi Central (DL-04)"
   },
-  priya: {
+  priya_patel: {
     name: "Priya Patel (Ahmedabad West GJ-08)",
-    voter_id: "88dbf9f66de9efc0d9a607e47a9ef03df07e2c9ef91040f666f29ef19ec35b91",
-    secret_key: "8a229db248c1e01fa320014b2d3bf98b1ef0ec1161d2d0b5e3d7a8d5f3089d38",
+    voter_id: "88dbf9f66de9efc0147bb7891f83510ce6bebbfd7a6131bd49daa7d5df0aa39c",
+    secret_key: "8a229db248c1e01f72c402728be7b338aa456fdf805d0fae87be1e67e76267ae",
     district: "Ahmedabad West (GJ-08)"
   },
-  rahul: {
+  rahul_verma: {
     name: "Rahul Verma (Bengaluru South KA-26)",
-    voter_id: "68f6015c851728a64aa6eb5121e78c89b4f7380489aaefab9770131eeea69ff6",
-    secret_key: "93a265f188730bbf23eb2594a50d2e82506692289635e9f899e1bc86095fc13a",
+    voter_id: "68f6015c851728a61191453f9df75bc94c264e7c9897538adb27354a3f5aa57f",
+    secret_key: "93a265f188730bbfb757d9def21c2b9072a27b637e112faea2d148a0158a1c9e",
     district: "Bengaluru South (KA-26)"
   },
-  ananya: {
+  ananya_iyer: {
     name: "Ananya Iyer (Chennai Central TN-04)",
-    voter_id: "fcf0847a54a13e6ba29aa63b15c92c4b07111b51e065bf636b08f4c2e008ba92",
-    secret_key: "33d8d8bf291bd6cb1eb1cb3550b07b34b684980693a612501d51a660a5e8e7b1",
+    voter_id: "fcf0847a54a13e6b59c00192ef7ec2b1df2d908b1d53ed67086e5a63c68dd6a9",
+    secret_key: "33d8d8bf291bd6cb36d49fc4382d6619a68d27e599e95f89fe293a844e1ad1e6",
     district: "Chennai Central (TN-04)"
   },
-  rohan: {
+  rohan_mukherjee: {
     name: "Rohan Mukherjee (Kolkata North WB-24)",
-    voter_id: "f8d101d7d6fd351ea22e2329241071da509311394145c110321d8a3ba5b8b939",
-    secret_key: "92759e48066fe98971f114c000ae605bf6ad59f5ae88a6d0b904fc49f506e890",
+    voter_id: "f8d101d7d6fd351e7e62881a79c2d17a7aba13aa935ddc4b8551119d80ba6769",
+    secret_key: "92759e48066fe98935d09adb1cd89855d39b7f628f98053f22e8ca75a34a7130",
     district: "Kolkata North (WB-24)"
+  },
+  elena_rostova: {
+    name: "Elena Rostova (Physics Ward)",
+    voter_id: "872595af0c083ec8dbc8ff5e935559f886f6bf7e987d5f6a1e588c522b654584",
+    secret_key: "cd33caa6dfa35c78f0dee37f9fec77b62549dd9e47e9bc8250e85872b2dca336",
+    district: "Physics Ward"
+  },
+  sneha_pillai: {
+    name: "Sneha Pillai (District Tech)",
+    voter_id: "4d6dd6a38b9b94e8497679d0ec49f904e23c223380df10f4e10ec3a620d1b0e6",
+    secret_key: "5a119f2be8eb2651b6f0da9bb43ee00ff44b256ddad4e802c87316d0ba3c02f0",
+    district: "District Tech"
+  },
+  krishna_chauhan: {
+    name: "Krishna Chauhan (District Tech)",
+    voter_id: "38ac902282368a51c80e362deca3bd3d528a633ed6b9138b38a37922fb9a4d1e",
+    secret_key: "f5600706b318860fe58cab4c7fe5c9b69a4e1a389de57e5dea73c8ba6079d3ee",
+    district: "District Tech"
   }
 };
+
+// Aliases for quick backward-compatibility lookup
+VOTER_KEYRING["aarav"] = VOTER_KEYRING["aarav_sharma"];
+VOTER_KEYRING["priya"] = VOTER_KEYRING["priya_patel"];
+VOTER_KEYRING["rahul"] = VOTER_KEYRING["rahul_verma"];
+VOTER_KEYRING["ananya"] = VOTER_KEYRING["ananya_iyer"];
+VOTER_KEYRING["rohan"] = VOTER_KEYRING["rohan_mukherjee"];
 
 let activeCitizenForCard = null;
 let cachedChain = [];
 let cachedElections = [];
 let selectedChoice = "YES";
 let pendingVotePayload = null;
+let lastReceiptHash = "";
+let nodeLocalIp = window.location.hostname || "127.0.0.1";
+let nodePort = window.location.port || "8000";
+let qrMode = "url";
+let lastVoteDetails = null;
+
+// Electronic Voting Machine (EVM) Audio Feedback Synthesizer
+function playEVMSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    // Authentic 2-tone voting chime
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.setValueAtTime(1760, now + 0.12);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.48);
+  } catch (e) {
+    // Autoplay policy or browser unsupported
+  }
+}
+
+// Real-Time ISO/IEC compliant QR Code generator for mobile phone cameras
+function updateReceiptQRCode() {
+  const qrImg = document.getElementById("receiptQrImage");
+  const label = document.getElementById("qrScanTargetLabel");
+  const btnToggle = document.getElementById("btnToggleQrMode");
+  if (!qrImg || !lastReceiptHash) return;
+
+  const portPart = (nodePort && String(nodePort) !== "80") ? `:${nodePort}` : "";
+  const host = (nodeLocalIp && nodeLocalIp !== "0.0.0.0") ? nodeLocalIp : window.location.hostname;
+  const mobileUrl = `http://${host}${portPart}/?verify=${encodeURIComponent(lastReceiptHash)}`;
+
+  let qrContent = mobileUrl;
+  if (qrMode === "text") {
+    const prop = lastVoteDetails ? lastVoteDetails.proposalId : "PROP";
+    const choice = lastVoteDetails ? lastVoteDetails.choice : "CHOICE";
+    qrContent = `OPENBALLOT VERIFIED BALLOT\nReceipt: ${lastReceiptHash}\nProposal: ${prop}\nVote: ${choice}\nSignature: Valid Ed25519`;
+    if (label) label.textContent = "Plaintext cryptographic receipt mode";
+    if (btnToggle) btnToggle.textContent = "⇄ Switch to Mobile URL QR";
+  } else {
+    if (label) label.textContent = `Scans to: ${host}${portPart}`;
+    if (btnToggle) btnToggle.textContent = "⇄ Switch to Text QR";
+  }
+
+  qrImg.src = `${API_BASE}/api/v1/qr?data=${encodeURIComponent(qrContent)}`;
+}
 
 // Shorten public keys cleanly for human readability
 function shortenKey(key, start = 8, end = 6) {
@@ -249,6 +333,8 @@ async function refreshAllData() {
     if (!healthRes.ok) throw new Error("Node connection failed");
 
     const health = await healthRes.json();
+    if (health.local_ip) nodeLocalIp = health.local_ip;
+    if (health.port) nodePort = health.port;
     const chainData = await chainRes.json();
     const mempoolData = await mempoolRes.json();
     const electionsData = await electionsRes.json();
@@ -261,14 +347,19 @@ async function refreshAllData() {
       if (citizensData.citizens && citizensData.citizens.length > 0) {
         citizensData.citizens.forEach(c => {
           const slug = (c.name || '').toLowerCase().replace(/[^a-z0-9]/g, "_") || c.voter_id.substring(0, 8);
-          VOTER_KEYRING[slug] = {
+          const firstWord = (c.name || '').toLowerCase().split(" ")[0];
+          const entry = {
             name: `${c.name} (${c.district || 'Citizen'})`,
-            voter_id: c.voter_id,
+            voter_id: c.voter_id.toLowerCase(),
             secret_key: c.secret_key || (VOTER_KEYRING[slug] ? VOTER_KEYRING[slug].secret_key : ""),
             district: c.district,
             has_voted: c.has_voted,
             voted_proposals: c.voted_proposals || []
           };
+          VOTER_KEYRING[slug] = entry;
+          if (firstWord && !VOTER_KEYRING[firstWord]) {
+            VOTER_KEYRING[firstWord] = entry;
+          }
         });
         renderVoterSelectOptions();
       }
@@ -276,6 +367,7 @@ async function refreshAllData() {
 
     cachedChain = chainData.chain || [];
     cachedElections = electionsData.elections || [];
+    cachedVoters = votersData.voters || [];
 
     // Header Status
     const nodeBadge = document.getElementById("headerNodeBadge");
@@ -782,6 +874,7 @@ if (btnConfirm) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           secret_key: pendingVotePayload.secretKey,
+          voter_id: pendingVotePayload.voterId,
           proposal_id: pendingVotePayload.proposalId,
           choice: pendingVotePayload.choice,
           weight: 1
@@ -802,8 +895,19 @@ if (btnConfirm) {
         throw new Error(ballotData.error || "Ballot ingestion rejected");
       }
 
+      lastReceiptHash = ballotData.receipt_hash || ballotData.vote_id || "";
+      lastVoteDetails = {
+        proposalId: pendingVotePayload.proposalId,
+        choice: pendingVotePayload.choice
+      };
       document.getElementById("receiptVoteId").textContent = ballotData.vote_id || signData.digest;
       document.getElementById("receiptProposal").textContent = pendingVotePayload.proposalId;
+      const elReceiptHash = document.getElementById("receiptHashVal");
+      if (elReceiptHash) {
+        elReceiptHash.textContent = lastReceiptHash;
+      }
+      updateReceiptQRCode();
+      playEVMSound();
 
       document.getElementById("stepIndicator3").className = "step-item completed";
       document.getElementById("stepIndicator4").className = "step-item completed";
@@ -811,7 +915,7 @@ if (btnConfirm) {
       document.getElementById("voteConfirmDialog").style.display = "none";
       document.getElementById("voteSuccessReceipt").style.display = "block";
 
-      showToast("Vote successfully submitted to mempool!", "success");
+      showToast("Vote successfully submitted & authenticated!", "success");
       await refreshAllData();
 
     } catch (err) {
@@ -819,6 +923,53 @@ if (btnConfirm) {
     } finally {
       btnConfirm.disabled = false;
       btnConfirm.textContent = "🔒 Authorize Digital Signature & Submit";
+    }
+  });
+}
+
+// Toggle QR code between mobile verification URL and plaintext cryptographic receipt
+const btnToggleQr = document.getElementById("btnToggleQrMode");
+if (btnToggleQr) {
+  btnToggleQr.addEventListener("click", () => {
+    qrMode = qrMode === "url" ? "text" : "url";
+    updateReceiptQRCode();
+  });
+}
+
+// Receipt helper actions
+const btnCopyReceipt = document.getElementById("btnCopyReceiptHash");
+if (btnCopyReceipt) {
+  btnCopyReceipt.addEventListener("click", () => {
+    if (lastReceiptHash) {
+      navigator.clipboard.writeText(lastReceiptHash);
+      showToast("Receipt hash copied to clipboard!", "success");
+    }
+  });
+}
+
+const btnTrackReceipt = document.getElementById("btnTrackReceiptNow");
+if (btnTrackReceipt) {
+  btnTrackReceipt.addEventListener("click", () => {
+    if (lastReceiptHash) {
+      const qInput = document.getElementById("verifyQueryInput");
+      if (qInput) qInput.value = lastReceiptHash;
+      navigateToTab("tab-verify-vote");
+      const vForm = document.getElementById("verifyVoteForm");
+      if (vForm) vForm.dispatchEvent(new Event("submit"));
+    }
+  });
+}
+
+const btnPasteReceipt = document.getElementById("btnPasteLastReceipt");
+if (btnPasteReceipt) {
+  btnPasteReceipt.addEventListener("click", () => {
+    if (lastReceiptHash) {
+      const qInput = document.getElementById("verifyQueryInput");
+      if (qInput) qInput.value = lastReceiptHash;
+      const vForm = document.getElementById("verifyVoteForm");
+      if (vForm) vForm.dispatchEvent(new Event("submit"));
+    } else {
+      showToast("No ballot receipt stored in this active session.", "info");
     }
   });
 }
@@ -883,6 +1034,7 @@ if (verifyForm) {
           <table class="data-table">
             <tbody>
               <tr><th style="width: 140px;">Voter Public ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.voter_id}</td></tr>
+              <tr><th>Receipt Hash</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px; color: #1e40af; font-weight: 600;">${data.receipt_hash || '-'}</td></tr>
               <tr><th>Vote Digest ID</th><td class="font-mono" style="word-break: break-all; font-size: 11.5px;">${data.vote_id}</td></tr>
               <tr><th>Digital Signature</th><td class="font-mono" style="word-break: break-all; font-size: 11px; color: var(--text-muted);">${data.signature}</td></tr>
             </tbody>
@@ -1149,19 +1301,30 @@ function closeModal(id) {
 
 // Select a citizen and switch to voting tab
 function voteWithCitizen(voterId) {
-  const slug = Object.keys(VOTER_KEYRING).find(k => VOTER_KEYRING[k].voter_id.toLowerCase() === voterId.toLowerCase());
+  const normVid = (voterId || "").trim().toLowerCase();
+  const slug = Object.keys(VOTER_KEYRING).find(k => (VOTER_KEYRING[k].voter_id || "").toLowerCase() === normVid);
   if (slug && voterProfileSelect) {
     voterProfileSelect.value = slug;
     updateVoterProfile();
+    showToast(`Selected citizen: ${VOTER_KEYRING[slug].name}`, "info");
+  } else if (voterProfileSelect) {
+    voterProfileSelect.value = "custom";
+    if (displayVoterId) displayVoterId.value = normVid;
+    if (customKeyGroup) customKeyGroup.style.display = "block";
+    updateVoterProfile();
+    showToast(`Selected voter ID ${shortenKey(normVid)}. Enter private key to sign ballot.`, "info");
   }
   navigateToTab("tab-cast-vote");
-  showToast("Selected citizen for voting authorization", "info");
 }
 
 // Show citizen digital ID card
-function showCitizenCard(voterId) {
-  const slug = Object.keys(VOTER_KEYRING).find(k => VOTER_KEYRING[k].voter_id.toLowerCase() === voterId.toLowerCase());
-  const citizen = slug ? VOTER_KEYRING[slug] : null;
+function showCitizenCard(voterId, citizenObj = null) {
+  let citizen = citizenObj;
+  const normVid = (voterId || "").trim().toLowerCase();
+  if (!citizen) {
+    const slug = Object.keys(VOTER_KEYRING).find(k => (VOTER_KEYRING[k].voter_id || "").toLowerCase() === normVid);
+    citizen = slug ? VOTER_KEYRING[slug] : null;
+  }
 
   if (citizen) {
     activeCitizenForCard = citizen;
@@ -1224,8 +1387,11 @@ if (quickCitForm) {
 
       showToast(`Citizen '${name}' created and whitelisted!`, "success");
       quickCitForm.reset();
+      const slug = (data.citizen.name || '').toLowerCase().replace(/[^a-z0-9]/g, "_") || data.citizen.voter_id.substring(0, 8);
+      VOTER_KEYRING[slug] = data.citizen;
+      renderVoterSelectOptions();
       await refreshAllData();
-      showCitizenCard(data.citizen.voter_id);
+      showCitizenCard(data.citizen.voter_id, data.citizen);
     } catch (err) {
       showToast(`Registration error: ${err.message}`, "error");
     }
@@ -1237,6 +1403,12 @@ const modalCitForm = document.getElementById("modalCreateCitizenForm");
 if (modalCitForm) {
   modalCitForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const submitBtn = modalCitForm.querySelector("button[type='submit']");
+    const origText = submitBtn ? submitBtn.textContent : "";
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Generating Keypair & Whitelisting...";
+    }
     const name = document.getElementById("citizenFullName").value.trim();
     const district = document.getElementById("citizenDistrict").value.trim();
 
@@ -1252,10 +1424,22 @@ if (modalCitForm) {
       closeModal("modalCreateCitizen");
       showToast(`Citizen '${name}' registered with Ed25519 keypair!`, "success");
       modalCitForm.reset();
+      const slug = (data.citizen.name || '').toLowerCase().replace(/[^a-z0-9]/g, "_") || data.citizen.voter_id.substring(0, 8);
+      VOTER_KEYRING[slug] = data.citizen;
+      renderVoterSelectOptions();
+      if (voterProfileSelect) {
+        voterProfileSelect.value = slug;
+        updateVoterProfile();
+      }
       await refreshAllData();
-      showCitizenCard(data.citizen.voter_id);
+      showCitizenCard(data.citizen.voter_id, data.citizen);
     } catch (err) {
       showToast(`Registration error: ${err.message}`, "error");
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = origText;
+      }
     }
   });
 }
@@ -1413,8 +1597,54 @@ function verifyReceiptOnChain() {
   }
 }
 
+// Real-time Event Streaming (Server-Sent Events)
+function initLiveEventStream() {
+  if (!window.EventSource) return;
+  try {
+    const evtSource = new EventSource(`${API_BASE}/api/v1/events`);
+    evtSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.event === "BLOCK_MINED") {
+          showToast(`⚡ Block #${payload.data.block_index} mined! (${payload.data.ballots_sealed} votes sealed)`, "success");
+          refreshAllData();
+        } else if (payload.event === "BALLOT_INGESTED") {
+          showToast(`📥 New ballot received into mempool`, "info");
+          refreshAllData();
+        } else if (payload.event === "VOTER_REGISTERED" || payload.event === "CITIZEN_REGISTERED") {
+          showToast(`🛡️ Voter registry updated in real-time`, "info");
+          refreshAllData();
+        }
+      } catch (e) {}
+    };
+    evtSource.onerror = () => {
+      evtSource.close();
+      setTimeout(initLiveEventStream, 10000);
+    };
+  } catch (e) {}
+}
+
+// Automatic verification when URL contains ?verify=<receipt_hash>
+function handleUrlVerification() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const verifyHash = urlParams.get("verify") || urlParams.get("receipt");
+  if (verifyHash) {
+    navigateToTab("tab-verify-vote");
+    const input = document.getElementById("verifyQueryInput");
+    if (input) {
+      input.value = verifyHash;
+      setTimeout(() => {
+        const vForm = document.getElementById("verifyVoteForm");
+        if (vForm) vForm.dispatchEvent(new Event("submit"));
+      }, 400);
+    }
+  }
+}
+
 // Initialize on page load and poll every 4 seconds
 window.addEventListener("DOMContentLoaded", () => {
   refreshAllData();
   setInterval(refreshAllData, 4000);
+  initLiveEventStream();
+  handleUrlVerification();
 });

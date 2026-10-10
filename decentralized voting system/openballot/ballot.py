@@ -31,13 +31,19 @@ class Ballot:
         except Exception:
             return False
 
+    @property
+    def receipt_hash(self) -> str:
+        payload = f"{self.voter_id.lower()}:{self.proposal_id}:{self.signature}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "voter_id": self.voter_id,
             "proposal_id": self.proposal_id,
             "choice": self.choice,
             "signature": self.signature,
-            "weight": self.weight
+            "weight": self.weight,
+            "receipt_hash": self.receipt_hash
         }
 
     @classmethod

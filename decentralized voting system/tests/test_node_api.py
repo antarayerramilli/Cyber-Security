@@ -1,6 +1,8 @@
 import json
 import urllib.request
 import urllib.error
+
+# pyrefly: ignore [missing-import]
 import pytest
 
 from openballot.crypto import generate_keypair, public_key_to_hex, sign_message
@@ -103,3 +105,63 @@ def test_api_verify_ballot_and_chain(running_server):
         audit_data = json.loads(resp.read().decode())
         assert "events" in audit_data
         assert len(audit_data["events"]) > 0
+
+
+def test_api_receipt_verification(running_server):
+    base_url, ledger = running_server
+    priv, pub = generate_keypair()
+    vid = public_key_to_hex(pub)
+    ledger.register_voter(vid)
+
+    ballot = Ballot(vid, "PROP-2026-02", "YES", weight=1)
+    ballot.signature = sign_message(priv, ballot.get_digest()).hex()
+
+    req = urllib.request.Request(
+        f"{base_url}/api/v1/ballots",
+        data=json.dumps(ballot.to_dict()).encode(),
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req) as resp:
+        res = json.loads(resp.read().decode())
+        receipt_hash = res["receipt_hash"]
+        assert receipt_hash == ballot.receipt_hash
+
+    # Query verify-ballot using receipt_hash
+    req_verify = urllib.request.Request(f"{base_url}/api/v1/verify-ballot?query={receipt_hash}")
+    with urllib.request.urlopen(req_verify) as v_resp:
+        v_data = json.loads(v_resp.read().decode())
+        assert v_data["found"] is True
+        assert v_data["receipt_hash"] == receipt_hash
+        assert v_data["signature_valid"] is True
+
+
+def test_api_register_voter_and_immediate_vote(running_server):
+    base_url, _ = running_server
+    priv, pub = generate_keypair()
+    vid = public_key_to_hex(pub)
+
+    # 1. Register voter via /api/v1/register
+    reg_req = urllib.request.Request(
+        f"{base_url}/api/v1/register",
+        data=json.dumps({"voter_id": vid, "name": "Dynamic Test Citizen"}).encode(),
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(reg_req) as reg_resp:
+        assert reg_resp.status == 200
+        reg_data = json.loads(reg_resp.read().decode())
+        assert reg_data["status"] == "registered"
+        assert reg_data["voter_id"] == vid.lower()
+
+    # 2. Immediately cast a ballot with the registered voter ID
+    ballot = Ballot(vid, "PROP-2026-01", "NO", weight=1)
+    ballot.signature = sign_message(priv, ballot.get_digest()).hex()
+
+    ballot_req = urllib.request.Request(
+        f"{base_url}/api/v1/ballots",
+        data=json.dumps(ballot.to_dict()).encode(),
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(ballot_req) as b_resp:
+        assert b_resp.status == 202
+        b_data = json.loads(b_resp.read().decode())
+        assert b_data["status"] == "accepted"
